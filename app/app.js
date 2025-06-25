@@ -8,12 +8,14 @@ const { createAdapter } = require('@socket.io/redis-adapter');
 const socketIO = require('socket.io');
 const session = require('express-session');
 const SequelizeStore = require('connect-session-sequelize')(session.Store);
-const { sequelize, Admin, GroupMember, FeatureFlag } = require('./models');
+const { sequelize, Admin, GroupMember, FeatureFlag, MinigameMapBlock } = require('./models'); // Added MinigameMapBlock for init check
+const { isAdmin, isUser, isUserAndInGroup } = require('./middleware/authMiddleware');
+const minigameController = require('./controllers/minigameController'); // For map initialization
 
-// --- START OF EDIT: متغیرهای کلاینت Redis به اسکوپ بالاتر منتقل شد ---
+
 let pubClient;
 let subClient;
-// --- END OF EDIT ---
+
 
 const app = express();
 const server = http.createServer(app);
@@ -23,26 +25,25 @@ const sessionMiddleware = session({
   store: new SequelizeStore({ db: sequelize }),
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 24 * 60 * 60 * 1000 }
+  cookie: { maxAge: 24 * 60 * 60 * 1000 } // 24 hours
 });
 
 const io = socketIO(server, {
   cors: {
-    origin: true,
+    origin: true, // Allow requests from the same origin
     credentials: true
   }
 });
 
 app.use(sessionMiddleware);
 io.use((socket, next) => {
+  // Wrap session middleware for Socket.IO
   sessionMiddleware(socket.request, {}, next);
 });
 
 async function setupRedisAdapter() {
-  // --- START OF EDIT: کلاینت‌ها به متغیرهای بیرونی مقداردهی می‌شوند ---
   pubClient = createClient({ url: `redis://${process.env.REDIS_HOST || 'localhost'}:${process.env.REDIS_PORT || 6379}` });
   subClient = pubClient.duplicate();
-  // --- END OF EDIT ---
 
   await Promise.all([pubClient.connect(), subClient.connect()]);
 
@@ -52,43 +53,31 @@ async function setupRedisAdapter() {
 
 setupRedisAdapter().catch(err => {
   console.error('FATAL: Failed to connect Redis adapter:', err);
-  process.exit(1);
+  process.exit(1); // Exit if Redis adapter fails
 });
 
-app.set('io', io);
+app.set('io', io); // Make io accessible to our router
 
+// View engine setup
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-function isAdmin(req, res, next) {
-  if (req.session.adminId) return next();
-  res.redirect('/');
-}
-function isUser(req, res, next) {
-  if (req.session.userId) return next();
-  res.redirect('/');
-}
 
-app.get('/', (req, res) => res.render('auth'));
-app.use('/', require('./routes/auth'));
+// --- Routes ---
+app.get('/', (req, res) => res.render('auth')); // Auth page is the entry point
+app.use('/', require('./routes/auth')); // Auth routes
 
+// Admin panel routes
 const adminRouter = require('./routes/admin')(io);
-app.use('/admin', isAdmin, adminRouter);
-
-const announcementsRouter = require('./routes/announcements')(io);
-app.use('/api/announcements', announcementsRouter);
-app.use('/admin/api/announcements', isAdmin, announcementsRouter);
+app.use('/admin', isAdmin, adminRouter); // Base admin access
 
 const adminGroupsRouter = require('./routes/adminGroups')(io);
 app.use('/admin/api/groups', isAdmin, adminGroupsRouter);
-
-const trainingRouter = require('./routes/training')(io);
-app.use('/api/training', isUser, trainingRouter);
-app.use('/admin/api/training', isAdmin, trainingRouter);
 
 const adminShopRouter = require('./routes/adminShop');
 app.use('/admin/api/shop', isAdmin, adminShopRouter);
@@ -96,16 +85,37 @@ app.use('/admin/api/shop', isAdmin, adminShopRouter);
 const adminUniqueItemsRouter = require('./routes/adminUniqueItems');
 app.use('/admin/api/unique-items', isAdmin, adminUniqueItemsRouter);
 
+const adminMinigameRouter = require('./routes/adminMinigame')(io); // Minigame Admin Routes
+app.use('/admin/api/minigame', isAdmin, adminMinigameRouter);
+
+
+// API routes for authenticated users
+const announcementsRouter = require('./routes/announcements')(io);
+app.use('/api/announcements', announcementsRouter); // Public part of announcements
+app.use('/admin/api/announcements', isAdmin, announcementsRouter); // Admin part
+
+const trainingRouter = require('./routes/training')(io);
+app.use('/api/training', isUser, trainingRouter);
+app.use('/admin/api/training', isAdmin, trainingRouter);
+
+
 const shopRouter = require('./routes/shop');
-app.use('/api/shop', isUser, shopRouter);
+app.use('/api/shop', isUserAndInGroup, shopRouter); // Shop requires user to be in a group for context
 
 const shopUniqueItemsRouter = require('./routes/shopUniqueItems');
-app.use('/api/shop/unique-items', isUser, shopUniqueItemsRouter);
+app.use('/api/shop/unique-items', isUserAndInGroup, shopUniqueItemsRouter);
 
 const groupRoutes = require('./routes/group');
-app.use('/api/groups', isUser, groupRoutes);
+app.use('/api/groups', isUser, groupRoutes); // General group actions (create, list, join)
+
+const minigameRouter = require('./routes/minigame')(io); // Minigame Player Routes
+app.use('/api/minigame', isUserAndInGroup, minigameRouter); // Minigame requires user to be in a group
+
+// Dashboard route (user specific)
 app.use('/dashboard', isUser, require('./routes/user'));
 
+
+// Feature flags endpoint
 app.get('/api/features/initial', isUser, async (req, res) => {
     try {
         const allFlags = await FeatureFlag.findAll({
@@ -221,6 +231,7 @@ async function seedFeatureFlags() {
     { name: 'menu_training', displayName: 'منوی آموزش‌ها', isEnabled: true, category: 'menu' },
     { name: 'menu_announcements', displayName: 'منوی اطلاعیه‌ها', isEnabled: true, category: 'menu' },
     { name: 'menu_radio', displayName: 'منوی رادیو', isEnabled: true, category: 'menu' },
+    { name: 'menu_minigame', displayName: 'منوی مینی‌گیم', isEnabled: true, category: 'menu' }, // New Minigame Menu
     { name: 'action_group_leave', displayName: 'عملیات خروج از گروه', isEnabled: true, category: 'action' },
     { name: 'action_group_delete', displayName: 'عملیات حذف گروه (توسط سرگروه)', isEnabled: true, category: 'action' }
   ];
@@ -234,10 +245,24 @@ async function seedFeatureFlags() {
   console.log('Feature flags seeded successfully.');
 }
 
+async function initializeMinigameMapIfNeeded() {
+  const mapBlockCount = await MinigameMapBlock.count();
+  if (mapBlockCount === 0) {
+    console.log("Minigame map is empty. Initializing default map...");
+    // We don't have 'req, res' here, so call it as a simple function.
+    // The controller function is designed to optionally take req, res.
+    await minigameController.initializeNewMap(null, null);
+    console.log("Default minigame map initialization attempted.");
+  } else {
+    console.log("Minigame map already contains data. Skipping initialization.");
+  }
+}
+
 sequelize.sync().then(async () => {
   console.log('Database synced successfully.');
   await seedAdmin();
   await seedFeatureFlags();
+  await initializeMinigameMapIfNeeded(); // Initialize map after other seeds
   const port = process.env.PORT || 3000;
   server.listen(port, () => console.log(`Server is listening on port ${port}`));
 }).catch(err => {

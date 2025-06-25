@@ -75,7 +75,8 @@
              { id:'shop',      label:'فروشگاه', icon:'store' },
              { id:'scoreboard',label:'جدول امتیازات', icon:'list-ol' },
              { id:'announcements',label:'اطلاعیه‌ها', icon:'bullhorn' },
-             { id:'radio',     label:'رادیو', icon:'broadcast-tower' }
+              { id:'radio',     label:'رادیو', icon:'broadcast-tower' },
+              { id:'minigame',  label:'مینی‌گیم', icon:'gamepad' } // Added Minigame
            ];
         %>
         <% sections.forEach(s => { %>
@@ -180,12 +181,19 @@
       </section>
         
       <section id="radio" class="content-section p-4"></section>
+
+       <section id="minigame" class="content-section hidden" style="width:100%; height:calc(100vh - 4rem); /* Full viewport height minus header */">
+         <div id="minigame-content-area" style="width:100%; height:100%;">
+           <!-- Minigame will be initialized here by minigame.js -->
+         </div>
+       </section>
       </main>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/socket-manager.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="/js/helpers.js"></script>
   <script src="/js/alert.js"></script>
   <script src="/js/sidebar.js"></script>
@@ -197,5 +205,6 @@
   <script src="/js/leaderboard.js"></script>
   <script src="/js/shop.js"></script>
   <script src="/js/radio-listener.js"></script>
+  <script src="/js/minigame.js"></script> <!-- Added Minigame script -->
   </body>
 </html>

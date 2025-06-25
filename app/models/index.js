@@ -35,6 +35,9 @@ db.Currency                = require('./currency')(sequelize, DataTypes);
 db.Wallet                  = require('./wallet')(sequelize, DataTypes);
 db.UniqueItem              = require('./uniqueItem')(sequelize, DataTypes);
 db.FeatureFlag             = require('./featureFlag')(sequelize, DataTypes);
+db.MinigameMapBlock        = require('./MinigameMapBlock')(sequelize, DataTypes);
+db.MinigamePlayer          = require('./MinigamePlayer')(sequelize, DataTypes);
+db.MinigameTreasureBox     = require('./MinigameTreasureBox')(sequelize, DataTypes);
 
 // set up associations
 Object.values(db).forEach(model => {

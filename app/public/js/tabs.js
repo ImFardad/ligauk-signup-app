@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', function(){
     const pageTitle = document.getElementById('page-title');
+    let minigameInitialized = false; // Flag to track Minigame initialization
     
     // --- START OF FIX: انتخابگرها به طور کامل از هم جدا شدند ---
     // انتخاب آیتم‌های منوی دسکتاپ فقط برای مدیریت کلاس active
@@ -18,8 +19,15 @@ document.addEventListener('DOMContentLoaded', function(){
         const next    = document.getElementById(id);
         if (!current || !next || current.id === id) return;
 
+        // Handle Minigame disconnect if switching away from it
+        if (current.id === 'minigame' && typeof Minigame !== 'undefined' && Minigame.isConnected) {
+            console.log('Switching away from minigame, disconnecting...');
+            Minigame.disconnect(true); // Auto disconnect, no success message needed from disconnect itself
+        }
+
         current.classList.remove('fade-in');
         current.classList.add('fade-out');
+
         current.addEventListener('transitionend', function handler(){
             current.classList.remove('active','fade-out');
             current.removeEventListener('transitionend', handler);
@@ -28,6 +36,24 @@ document.addEventListener('DOMContentLoaded', function(){
             const menuItem = allMenuItems.find(i => i.dataset.section === id);
             if (menuItem) {
                 pageTitle.textContent = menuItem.innerText;
+            }
+
+            // Handle Minigame init if switching to it
+            if (id === 'minigame' && typeof Minigame !== 'undefined') {
+                if (!minigameInitialized) {
+                    console.log('Initializing Minigame for the first time...');
+                    Minigame.init('minigame-content-area');
+                    minigameInitialized = true;
+                } else if (!Minigame.isConnected && Minigame.gameScreenEl.style.display === 'none') {
+                    // If returning to minigame tab and it was previously disconnected fully
+                    // and loading screen is up, re-setup loading screen (connect button will be there)
+                    console.log('Returning to Minigame tab, ensuring loading screen is set up if disconnected.');
+                    Minigame.setupLoadingScreen();
+                } else if (Minigame.isConnected && Minigame.renderer && !Minigame.renderer.info.render.frame) {
+                    // If returning and was connected but animation loop might have stopped
+                    console.log('Returning to connected Minigame, ensuring animation loop is active.');
+                    Minigame.animate();
+                }
             }
         }, { once: true });
     }

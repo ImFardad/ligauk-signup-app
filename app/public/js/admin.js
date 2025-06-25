@@ -10,7 +10,8 @@ new Vue({
     shopAdminMixin, // برای ارزها
     adminUniqueItemsMixin,
     adminFeaturesMixin, // میکسین جدید برای مدیریت رویدادها
-    adminRadioMixin     // --- میکس‌این جدید رادیو اضافه شد ---
+    adminRadioMixin,     // --- میکس‌این جدید رادیو اضافه شد ---
+    adminMinigameMixin   // Added Minigame Admin Mixin
   ],
   data: {
     editingId: null, // این فیلد ممکن است بین mixinها مشترک باشد، پس در سطح اصلی می‌ماند
@@ -23,7 +24,8 @@ new Vue({
       { key: 'items', label: 'فروشگاه' },
       { key: 'contents', label: 'محتواها' },
       { key: 'features', label: 'مدیریت رویدادها' },
-      { key: 'radio', label: 'رادیو' } // --- بخش جدید رادیو اضافه شد ---
+      { key: 'radio', label: 'رادیو' }, // --- بخش جدید رادیو اضافه شد ---
+      { key: 'minigame_admin', label: 'مدیریت مینی‌گیم' } // Added Minigame Admin Section
     ]
   },
   created() {
@@ -120,6 +122,9 @@ new Vue({
                 break;
             case 'radio':
                 // بخش رادیو نیازی به بارگذاری داده اولیه ندارد
+                break;
+            case 'minigame_admin': // Added Minigame Admin
+                await this.loadMinigameAdminData(); // Method from adminMinigameMixin
                 break;
         }
         // --- END OF FIX ---

@@ -482,6 +482,91 @@
       
         </div>
       </section>
+
+      <section id="minigame_admin" v-show="activeSection==='minigame_admin'" class="content-section" :class="{'active fade-in': activeSection==='minigame_admin'}">
+        <h2 class="text-2xl font-bold mb-6 text-yellow-400">مدیریت مینی‌گیم</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <!-- Column 1: Map and Block Management -->
+          <div class="md:col-span-2 bg-gray-700 p-4 rounded-lg shadow">
+            <h3 class="text-xl font-semibold mb-3">نقشه و بلاک‌ها</h3>
+            <button @click="initializeMapForce" class="btn-secondary mb-4">بازسازی و مقداردهی اولیه کل نقشه</button>
+
+            <div class="mb-4 p-2 border border-gray-600 rounded">
+                <h4 class="text-md font-semibold mb-2">نمای کلی نقشه (z=0)</h4>
+                <canvas ref="minigameMapCanvas" @click="handleMapClick" class="w-full h-64 md:h-96 bg-gray-600 rounded cursor-pointer" style="max-width:500px; max-height:500px;"></canvas>
+                <div class="flex space-x-2 mt-2">
+                    <label class="flex items-center">مرکز X: <input type="number" v-model.number="mapViewCenter.x" class="input-field w-16 ml-1"></label>
+                    <label class="flex items-center">مرکز Y: <input type="number" v-model.number="mapViewCenter.y" class="input-field w-16 ml-1"></label>
+                </div>
+            </div>
+
+            <form @submit.prevent="submitNewBlock" class="space-y-3 bg-gray-600 p-3 rounded">
+              <h4 class="text-md font-semibold">افزودن/ویرایش بلاک</h4>
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <input v-model.number="newBlock.x" type="number" placeholder="X" class="input-field">
+                <input v-model.number="newBlock.y" type="number" placeholder="Y" class="input-field">
+                <input v-model.number="newBlock.z" type="number" placeholder="Z (ارتفاع)" class="input-field">
+                <input v-model="newBlock.type" type="text" placeholder="نوع بلاک (مثال: grass)" class="input-field">
+              </div>
+              <div class="flex items-center">
+                <input v-model="newBlock.isWalkable" type="checkbox" id="isWalkable" class="ml-2">
+                <label for="isWalkable">قابل راه رفتن</label>
+              </div>
+              <button type="submit" class="btn-primary">ذخیره بلاک</button>
+            </form>
+            <!-- TODO: Display list of blocks if needed, or a way to edit existing ones -->
+          </div>
+
+          <!-- Column 2: Treasure Management -->
+          <div class="bg-gray-700 p-4 rounded-lg shadow">
+            <h3 class="text-xl font-semibold mb-3">جعبه‌های جایزه</h3>
+            <form @submit.prevent="submitNewTreasure" class="space-y-3 bg-gray-600 p-3 rounded mb-4">
+              <h4 class="text-md font-semibold">افزودن جعبه جایزه</h4>
+               <p v-if="selectedBlockForTreasure" class="text-sm text-green-300">
+                محل انتخاب شده: ({{ selectedBlockForTreasure.x }}, {{ selectedBlockForTreasure.y }}, {{ selectedBlockForTreasure.z }})
+              </p>
+              <p v-else class="text-sm text-yellow-300">برای انتخاب محل، روی نقشه کلیک کنید یا مختصات را دستی وارد نمایید.</p>
+              <div class="grid grid-cols-3 gap-2">
+                <input v-model.number="newTreasure.positionX" type="number" placeholder="X" class="input-field">
+                <input v-model.number="newTreasure.positionY" type="number" placeholder="Y" class="input-field">
+                <input v-model.number="newTreasure.positionZ" type="number" placeholder="Z" class="input-field">
+              </div>
+              <select v-model="newTreasure.prizeType" class="input-field w-full">
+                <option value="fuel">سوخت</option>
+                <option value="score">امتیاز گروه</option>
+              </select>
+              <input v-model.number="newTreasure.prizeAmount" type="number" placeholder="مقدار جایزه" class="input-field w-full">
+              <button type="submit" class="btn-primary">افزودن جعبه</button>
+            </form>
+
+            <h4 class="text-md font-semibold mt-4 mb-2">لیست جعبه‌های موجود</h4>
+            <div class="max-h-96 overflow-y-auto">
+              <table class="w-full text-sm compact-table">
+                <thead>
+                  <tr class="bg-gray-800">
+                    <th>مختصات</th><th>نوع</th><th>مقدار</th><th>وضعیت</th><th>حذف</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(treasure, index) in minigameTreasures" :key="treasure.id" class="border-b border-gray-600 hover:bg-gray-600">
+                    <td>({{ treasure.positionX }}, {{ treasure.positionY }}, {{ treasure.positionZ }})</td>
+                    <td>{{ treasure.prizeType === 'fuel' ? 'سوخت' : 'امتیاز' }}</td>
+                    <td>{{ treasure.prizeAmount }}</td>
+                    <td>{{ treasure.isOpened ? 'باز شده' : 'بسته' }}</td>
+                    <td>
+                      <button @click="removeTreasure(treasure.id, index)" class="btn-secondary text-xs">حذف</button>
+                    </td>
+                  </tr>
+                  <tr v-if="!minigameTreasures.length">
+                     <td colspan="5" class="text-center py-3">هیچ جعبه جایزه‌ای یافت نشد.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
       </div>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
@@ -494,6 +579,7 @@
   <script src="/js/admin-unique-items-mixin.js"></script>
   <script src="/js/admin-features-mixin.js"></script>
   <script src="/js/admin-radio-mixin.js"></script>
+  <script src="/js/adminMinigameMixin.js"></script> <!-- Added Minigame Admin Mixin script -->
   <script src="/js/admin.js"></script>
 
 </body>
