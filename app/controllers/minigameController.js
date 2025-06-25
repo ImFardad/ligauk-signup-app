@@ -598,11 +598,18 @@ exports.initializeNewMap = async (req, res) => {
 
     try {
         const existingBlocksCount = await MinigameMapBlock.count();
-        if (existingBlocksCount > 0 && !(req.query.force === 'true')) {
-            return res.status(400).json({ message: "نقشه قبلاً ساخته شده است. برای بازسازی از پارامتر force=true استفاده کنید." });
+        // Check if req and req.query exist before trying to access req.query.force
+        const forceOverwrite = req && req.query && req.query.force === 'true';
+
+        if (existingBlocksCount > 0 && !forceOverwrite) {
+            if (res) { // Only send response if res object exists (i.e., called via HTTP)
+                return res.status(400).json({ message: "نقشه قبلاً ساخته شده است. برای بازسازی از پارامتر force=true استفاده کنید." });
+            }
+            console.log("Map already exists and force is not true. Skipping regeneration.");
+            return; // Exit if not forcing and map exists
         }
 
-        if (req.query.force === 'true') {
+        if (forceOverwrite) {
             await MinigameMapBlock.destroy({ where: {}, truncate: true });
             await MinigameTreasureBox.destroy({ where: {}, truncate: true });
             console.log("Admin: Forced map and treasure regeneration. Old data cleared.");
