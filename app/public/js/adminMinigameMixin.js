@@ -129,7 +129,8 @@ const adminMinigameMixin = {
 
         // Draw blocks (only those at z=0 for simplicity, or highest block at x,y)
         const drawnXY = new Set();
-        this.minigameBlocks.sort((a,b) => b.z - a.z) // Draw higher blocks on top
+        // Create a copy of the array before sorting to prevent in-place modification triggering the watcher
+        [...this.minigameBlocks].sort((a,b) => b.z - a.z) // Draw higher blocks on top
             .forEach(block => {
             const keyXY = `${block.x}_${block.y}`;
             if(drawnXY.has(keyXY)) return; // Only draw the top-most block for each x,y
@@ -198,9 +199,10 @@ const adminMinigameMixin = {
     // Call this when the minigame admin section is loaded
     loadMinigameAdminData() {
         this.fetchMinigameData().then(() => {
-            this.$nextTick(() => { // Ensure canvas is in DOM
-                this.drawMinigameMap();
-            });
+            // Watcher should handle calling drawMinigameMap after data is fetched and minigameBlocks is updated.
+            // this.$nextTick(() => {
+            //     this.drawMinigameMap();
+            // });
         });
     }
   },
