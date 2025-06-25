@@ -4,7 +4,8 @@ const { Op } = require('sequelize');
 
 // Game Constants
 const MINIGAME_CONSTANTS = {
-    MAP_RADIUS: 100, // Max distance from 0,0 for map generation
+    // MAP_RADIUS: 100, // Max distance from 0,0 for map generation - REPLACED
+    MAP_SIZE: 80, // Side length of the square map
     VIEW_RADIUS: 10, // Player's line of sight in blocks
     FUEL_PER_MOVE: 1,
     INITIAL_FUEL: 20,
@@ -153,14 +154,32 @@ exports.connectPlayer = async (req, res) => {
 
             while(!validSpawnFound && attempts < maxSpawnAttempts) {
                 attempts++;
-                // Try to spawn on the edge of the land part of the island
-                const angle = Math.random() * Math.PI * 2;
-                const radius = MINIGAME_CONSTANTS.MAP_RADIUS - MINIGAME_CONSTANTS.SPAWN_EDGE_OFFSET -1; // Spawn just inside the absolute edge
+                let candidateX, candidateY;
+                const edgeOffset = MINIGAME_CONSTANTS.SPAWN_EDGE_OFFSET;
+                const halfMapSize = Math.floor(MINIGAME_CONSTANTS.MAP_SIZE / 2);
+                const landEdge = halfMapSize - edgeOffset; // Spawn inside the land, away from water border
 
-                const candidateX = Math.round(Math.cos(angle) * radius);
-                const candidateY = Math.round(Math.sin(angle) * radius);
+                // Pick a random side (0: +X, 1: -X, 2: +Y, 3: -Y)
+                const side = Math.floor(Math.random() * 4);
+                switch(side) {
+                    case 0: // Right edge (+X)
+                        candidateX = landEdge -1; // -1 because map loop is < HALF_MAP_SIDE
+                        candidateY = Math.floor(Math.random() * (2 * landEdge)) - landEdge;
+                        break;
+                    case 1: // Left edge (-X)
+                        candidateX = -landEdge;
+                        candidateY = Math.floor(Math.random() * (2 * landEdge)) - landEdge;
+                        break;
+                    case 2: // Top edge (+Y)
+                        candidateY = landEdge -1;
+                        candidateX = Math.floor(Math.random() * (2 * landEdge)) - landEdge;
+                        break;
+                    case 3: // Bottom edge (-Y)
+                        candidateY = -landEdge;
+                        candidateX = Math.floor(Math.random() * (2 * landEdge)) - landEdge;
+                        break;
+                }
 
-                // Find the highest walkable block at (candidateX, candidateY)
                 const groundBlocks = await MinigameMapBlock.findAll({
                     where: { x: candidateX, y: candidateY, isWalkable: true },
                     order: [['z', 'DESC']]
@@ -173,19 +192,21 @@ exports.connectPlayer = async (req, res) => {
             }
 
             if (!validSpawnFound) {
-                // Fallback: if no suitable edge point found after attempts, try spawning at/near (0,0,0) on a walkable block
-                // This is a last resort and might indicate map generation issues if it happens often.
-                console.warn(`Could not find valid edge spawn for group ${groupId}, attempting center spawn.`);
-                const centerBlock = await MinigameMapBlock.findOne({
-                    where: { x: 0, y: 0, isWalkable: true }, // Try at z=0 first
-                    order: [['z', 'DESC']]
+                console.warn(`Could not find valid edge spawn for group ${groupId}, attempting center spawn on square map.`);
+                const centerSearchRadius = 5;
+                const centerBlocks = await MinigameMapBlock.findAll({
+                    where: {
+                        x: { [Op.between]: [-centerSearchRadius, centerSearchRadius] },
+                        y: { [Op.between]: [-centerSearchRadius, centerSearchRadius] },
+                        isWalkable: true
+                    },
+                    order: [['z', 'DESC']],
+                    limit: 1
                 });
-                if (centerBlock) {
-                    spawnPosition = { x: centerBlock.x, y: centerBlock.y, z: centerBlock.z };
+                if (centerBlocks.length > 0) {
+                    spawnPosition = { x: centerBlocks[0].x, y: centerBlocks[0].y, z: centerBlocks[0].z };
                 } else {
-                    // Absolute fallback: if map is totally unspawnable (should not happen)
-                    console.error(`CRITICAL: No walkable block found anywhere for group ${groupId}. Defaulting to 0,0,0 which might be in water.`);
-                    // spawnPosition remains {x:0,y:0,z:0}
+                    console.error(`CRITICAL: No walkable block found anywhere for group ${groupId} on square map. Defaulting to 0,0,0.`);
                 }
             }
 
@@ -306,11 +327,11 @@ exports.movePlayer = async (req, res) => {
         // TODO: Implement Z-axis check for hills/valleys/bridges
         const targetZ = player.positionZ;
 
-
-        // Check map boundaries (circular map)
-        if (Math.sqrt(targetX * targetX + targetY * targetY) > MINIGAME_CONSTANTS.MAP_RADIUS) {
-             emitGroupNotification(io, groupId, 'نمی‌توانید از محدوده جزیره خارج شوید!', 'warn');
-            return res.status(400).json({ message: 'رسیدن به لبه نقشه.' });
+        // Check map boundaries (square map)
+        const halfMapSize = Math.floor(MINIGAME_CONSTANTS.MAP_SIZE / 2);
+        if (targetX >= halfMapSize || targetX < -halfMapSize || targetY >= halfMapSize || targetY < -halfMapSize) {
+            emitGroupNotification(io, groupId, 'نمی‌توانید از محدوده نقشه خارج شوید!', 'warn');
+            return res.status(400).json({ message: 'رسیدن به لبه نقشه مربعی.' });
         }
 
         // Check if target block is walkable
@@ -637,20 +658,20 @@ exports.adminRemoveTreasureBox = async (req, res) => {
 // This function would be called once, perhaps on server start or via an admin action.
 // It should create a variety of biomes, structures, etc.
 exports.initializeNewMap = async (req, res) => {
-    const MAP_SIZE = MINIGAME_CONSTANTS.MAP_RADIUS; // Use this for generation bounds
-    const CHUNK_SIZE = 10; // Process in chunks to avoid overload
+    const MAP_SIDE_LENGTH = MINIGAME_CONSTANTS.MAP_SIZE;
+    const HALF_MAP_SIDE = Math.floor(MAP_SIDE_LENGTH / 2);
+    const CHUNK_SIZE = 20; // Process in larger chunks if possible, or adjust based on performance
 
     try {
         const existingBlocksCount = await MinigameMapBlock.count();
-        // Check if req and req.query exist before trying to access req.query.force
         const forceOverwrite = req && req.query && req.query.force === 'true';
 
         if (existingBlocksCount > 0 && !forceOverwrite) {
-            if (res) { // Only send response if res object exists (i.e., called via HTTP)
+            if (res) {
                 return res.status(400).json({ message: "نقشه قبلاً ساخته شده است. برای بازسازی از پارامتر force=true استفاده کنید." });
             }
             console.log("Map already exists and force is not true. Skipping regeneration.");
-            return; // Exit if not forcing and map exists
+            return;
         }
 
         if (forceOverwrite) {
