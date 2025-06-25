@@ -143,26 +143,65 @@ exports.connectPlayer = async (req, res) => {
 
 
         let player = await MinigamePlayer.findOne({ where: { groupId } });
+        let spawnPosition = { x: 0, y: 0, z: 0 };
 
         if (!player) {
-            // First time connection for this group, find a spawn point
-            // Simplified spawn: near 0,0 or a predefined edge point.
-            // A more complex spawn would check for valid, unoccupied land near other players or map edge.
-            const spawnX = Math.random() > 0.5 ? MINIGAME_CONSTANTS.MAP_RADIUS - MINIGAME_CONSTANTS.SPAWN_EDGE_OFFSET : -(MINIGAME_CONSTANTS.MAP_RADIUS - MINIGAME_CONSTANTS.SPAWN_EDGE_OFFSET);
-            const spawnY = Math.floor(Math.random() * MINIGAME_CONSTANTS.MAP_RADIUS * 2) - MINIGAME_CONSTANTS.MAP_RADIUS;
-            // TODO: Ensure spawnZ is on a walkable block. For now, assume z=0.
-            const spawnZ = 0;
+            // First time connection for this group, find a valid spawn point on land
+            let validSpawnFound = false;
+            let attempts = 0;
+            const maxSpawnAttempts = 10; // Max attempts to find a spawn point
+
+            while(!validSpawnFound && attempts < maxSpawnAttempts) {
+                attempts++;
+                // Try to spawn on the edge of the land part of the island
+                const angle = Math.random() * Math.PI * 2;
+                const radius = MINIGAME_CONSTANTS.MAP_RADIUS - MINIGAME_CONSTANTS.SPAWN_EDGE_OFFSET -1; // Spawn just inside the absolute edge
+
+                const candidateX = Math.round(Math.cos(angle) * radius);
+                const candidateY = Math.round(Math.sin(angle) * radius);
+
+                // Find the highest walkable block at (candidateX, candidateY)
+                const groundBlocks = await MinigameMapBlock.findAll({
+                    where: { x: candidateX, y: candidateY, isWalkable: true },
+                    order: [['z', 'DESC']]
+                });
+
+                if (groundBlocks.length > 0) {
+                    spawnPosition = { x: groundBlocks[0].x, y: groundBlocks[0].y, z: groundBlocks[0].z };
+                    validSpawnFound = true;
+                }
+            }
+
+            if (!validSpawnFound) {
+                // Fallback: if no suitable edge point found after attempts, try spawning at/near (0,0,0) on a walkable block
+                // This is a last resort and might indicate map generation issues if it happens often.
+                console.warn(`Could not find valid edge spawn for group ${groupId}, attempting center spawn.`);
+                const centerBlock = await MinigameMapBlock.findOne({
+                    where: { x: 0, y: 0, isWalkable: true }, // Try at z=0 first
+                    order: [['z', 'DESC']]
+                });
+                if (centerBlock) {
+                    spawnPosition = { x: centerBlock.x, y: centerBlock.y, z: centerBlock.z };
+                } else {
+                    // Absolute fallback: if map is totally unspawnable (should not happen)
+                    console.error(`CRITICAL: No walkable block found anywhere for group ${groupId}. Defaulting to 0,0,0 which might be in water.`);
+                    // spawnPosition remains {x:0,y:0,z:0}
+                }
+            }
 
             player = await MinigamePlayer.create({
                 groupId,
-                positionX: spawnX,
-                positionY: spawnY,
-                positionZ: spawnZ, // Find ground Z later
+                positionX: spawnPosition.x,
+                positionY: spawnPosition.y,
+                positionZ: spawnPosition.z,
                 fuel: MINIGAME_CONSTANTS.INITIAL_FUEL,
                 isConnected: true,
                 lastSeen: new Date(),
             });
         } else {
+            // For existing players reconnecting, ensure their last position is still valid.
+            // If not, they might need to be respawned. For now, trust last position.
+            spawnPosition = { x: player.positionX, y: player.positionY, z: player.positionZ };
             player.isConnected = true;
             player.lastSeen = new Date();
             await player.save();
@@ -632,32 +671,59 @@ exports.initializeNewMap = async (req, res) => {
                 let z = 0; // Base height for water
 
                 if (distance < MAP_SIZE) { // Inside the island radius
+                    // Default to walkable for land unless specified otherwise (like for tree trunks)
                     isWalkable = true;
                     // Simple biome: gradient from sand (beach) to grass (plains) to stone (mountains)
-                    if (distance > MAP_SIZE - 5) { // Beach area
+                    if (distance > MAP_SIZE - MINIGAME_CONSTANTS.SPAWN_EDGE_OFFSET -1 && distance < MAP_SIZE ) { // Ensure spawn edge is land (sand)
+                        blockType = 'sand';
+                        z = 0; // Beach is flat at z=0
+                        isWalkable = true;
+                    } else if (distance > MAP_SIZE - 5 && distance <= MAP_SIZE - MINIGAME_CONSTANTS.SPAWN_EDGE_OFFSET -1 ) { // Beach area slightly further in
                         blockType = 'sand';
                         z = 0;
+                        isWalkable = true;
                     } else if (distance > MAP_SIZE * 0.6) { // Grass plains
                         blockType = 'grass';
                         z = 0;
-                        // Add some random height variation for grass
                         if (Math.random() < 0.1) z = 1; // Small hills
+                        isWalkable = true;
                     } else if (distance > MAP_SIZE * 0.3) { // Foothills / light forest
-                        blockType = Math.random() < 0.7 ? 'grass' : 'tree_trunk'; // 30% chance of tree trunk
-                        z = blockType === 'tree_trunk' ? Math.floor(Math.random()*3) + 1 : (Math.random() < 0.2 ? 1 : 0) ; // Trees are 1-3 blocks high
-                        if (blockType === 'tree_trunk') isWalkable = false; // Can't walk through trunks
-                    }
-                    else { // Mountainous center
+                        if (Math.random() < 0.7) {
+                            blockType = 'grass';
+                            z = (Math.random() < 0.2 ? 1 : 0);
+                            isWalkable = true;
+                        } else {
+                            blockType = 'tree_trunk';
+                            z = Math.floor(Math.random()*3) + 1; // Trees are 1-3 blocks high
+                            isWalkable = false; // Can't walk through trunks
+                        }
+                    } else { // Mountainous center
                         blockType = 'stone';
                         z = Math.floor(Math.random() * 3) + 1; // Mountains are 1-3 blocks high from base
                         if (Math.random() < 0.1) z = Math.floor(Math.random() * 2) + 3; // some higher peaks
+                        isWalkable = true; // Can walk on stone mountains
                     }
+                } else { // Outside island radius is water
+                    blockType = 'water';
+                    isWalkable = false;
+                    z = 0;
                 }
 
-                blocksToCreate.push({ x, y, z, type: blockType, isWalkable });
+                // Ensure the block to be added doesn't overwrite a more important generated block (like a bridge part)
+                // This simple generation doesn't have overlaps that need complex resolution, but good to keep in mind.
+                const existingBlockIndex = blocksToCreate.findIndex(b => b.x === x && b.y === y && b.z === z);
+                if (existingBlockIndex !== -1) {
+                    // If a block already exists at this x,y,z, decide if to overwrite.
+                    // For this generator, assume last write wins unless specific logic is added.
+                    // We'll overwrite here, as the outer loop defines base terrain first.
+                    blocksToCreate[existingBlockIndex] = { x, y, z, type: blockType, isWalkable };
+                } else {
+                    blocksToCreate.push({ x, y, z, type: blockType, isWalkable });
+                }
+
 
                 // Add leaves on top of tree trunks
-                if (blockType === 'tree_trunk' && z > 0) {
+                if (blockType === 'tree_trunk' && z > 0) { // Check if current block became a tree trunk
                     for (let i = 1; i <=2; i++) { // Add 2 layers of leaves
                          blocksToCreate.push({ x, y, z: z + i, type: 'leaves', isWalkable: false });
                     }
