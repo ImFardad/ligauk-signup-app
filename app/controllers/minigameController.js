@@ -492,8 +492,13 @@ exports.getInitialMapOverview = async (req, res) => {
 // --- Admin Route Handlers ---
 exports.adminGetMapData = async (req, res) => {
     try {
-        const blocks = await MinigameMapBlock.findAll({ order: [['x', 'ASC'], ['y', 'ASC'], ['z', 'ASC']] });
+        // TEMPORARY: Limit the number of blocks for testing due to large data volume
+        const blocks = await MinigameMapBlock.findAll({
+            order: [['x', 'ASC'], ['y', 'ASC'], ['z', 'ASC']],
+            limit: 1000 // Limit to 1000 blocks for now
+        });
         const treasures = await MinigameTreasureBox.findAll({ order: [['id', 'ASC']] });
+        console.log(`Admin: Sending ${blocks.length} blocks and ${treasures.length} treasures to admin panel.`);
         res.json({ blocks, treasures });
     } catch (error) {
         console.error("Admin: Error fetching map data:", error);
