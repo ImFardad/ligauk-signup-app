@@ -680,136 +680,91 @@ exports.initializeNewMap = async (req, res) => {
             console.log("Admin: Forced map and treasure regeneration. Old data cleared.");
         }
 
-        console.log("Admin: Starting initial map generation...");
+        console.log(`Admin: Starting initial square map generation (Size: ${MAP_SIDE_LENGTH}x${MAP_SIDE_LENGTH})...`);
         const blocksToCreate = [];
 
-        // Simple island generation: circular landmass, water around edges
-        for (let x = -MAP_SIZE; x <= MAP_SIZE; x++) {
-            for (let y = -MAP_SIZE; y <= MAP_SIZE; y++) {
-                const distance = Math.sqrt(x*x + y*y);
-                let blockType = 'water';
-                let isWalkable = false;
-                let z = 0; // Base height for water
+        // Create a square map with a border of water
+        const waterBorder = 2; // How many blocks of water around the land
+        const landStart = -HALF_MAP_SIDE + waterBorder;
+        const landEnd = HALF_MAP_SIDE - waterBorder -1; // -1 because loop is <=
 
-                if (distance < MAP_SIZE) { // Inside the island radius
-                    // Default to walkable for land unless specified otherwise (like for tree trunks)
-                    isWalkable = true;
-                    // Simple biome: gradient from sand (beach) to grass (plains) to stone (mountains)
-                    if (distance > MAP_SIZE - MINIGAME_CONSTANTS.SPAWN_EDGE_OFFSET -1 && distance < MAP_SIZE ) { // Ensure spawn edge is land (sand)
-                        blockType = 'sand';
-                        z = 0; // Beach is flat at z=0
-                        isWalkable = true;
-                    } else if (distance > MAP_SIZE - 5 && distance <= MAP_SIZE - MINIGAME_CONSTANTS.SPAWN_EDGE_OFFSET -1 ) { // Beach area slightly further in
-                        blockType = 'sand';
-                        z = 0;
-                        isWalkable = true;
-                    } else if (distance > MAP_SIZE * 0.6) { // Grass plains
-                        blockType = 'grass';
-                        z = 0;
-                        if (Math.random() < 0.1) z = 1; // Small hills
-                        isWalkable = true;
-                    } else if (distance > MAP_SIZE * 0.3) { // Foothills / light forest
-                        if (Math.random() < 0.7) {
-                            blockType = 'grass';
-                            z = (Math.random() < 0.2 ? 1 : 0);
-                            isWalkable = true;
-                        } else {
-                            blockType = 'tree_trunk';
-                            z = Math.floor(Math.random()*3) + 1; // Trees are 1-3 blocks high
-                            isWalkable = false; // Can't walk through trunks
-                        }
-                    } else { // Mountainous center
-                        blockType = 'stone';
-                        z = Math.floor(Math.random() * 3) + 1; // Mountains are 1-3 blocks high from base
-                        if (Math.random() < 0.1) z = Math.floor(Math.random() * 2) + 3; // some higher peaks
-                        isWalkable = true; // Can walk on stone mountains
-                    }
-                } else { // Outside island radius is water
+        for (let x = -HALF_MAP_SIDE; x < HALF_MAP_SIDE; x++) { // Iterate up to, but not including, HALF_MAP_SIDE
+            for (let y = -HALF_MAP_SIDE; y < HALF_MAP_SIDE; y++) {
+                let blockType = 'grass'; // Default to grass
+                let isWalkable = true;
+                let z = 0;
+
+                // Determine if it's a water border or land
+                if (x < landStart || x > landEnd || y < landStart || y > landEnd) {
                     blockType = 'water';
                     isWalkable = false;
-                    z = 0;
-                }
-
-                // Ensure the block to be added doesn't overwrite a more important generated block (like a bridge part)
-                // This simple generation doesn't have overlaps that need complex resolution, but good to keep in mind.
-                const existingBlockIndex = blocksToCreate.findIndex(b => b.x === x && b.y === y && b.z === z);
-                if (existingBlockIndex !== -1) {
-                    // If a block already exists at this x,y,z, decide if to overwrite.
-                    // For this generator, assume last write wins unless specific logic is added.
-                    // We'll overwrite here, as the outer loop defines base terrain first.
-                    blocksToCreate[existingBlockIndex] = { x, y, z, type: blockType, isWalkable };
+                    z = 0; // Water at base level
                 } else {
-                    blocksToCreate.push({ x, y, z, type: blockType, isWalkable });
-                }
-
-
-                // Add leaves on top of tree trunks
-                if (blockType === 'tree_trunk' && z > 0) { // Check if current block became a tree trunk
-                    for (let i = 1; i <=2; i++) { // Add 2 layers of leaves
-                         blocksToCreate.push({ x, y, z: z + i, type: 'leaves', isWalkable: false });
+                    // Land area - can add more biome logic here later if needed
+                    // Example: some random hills
+                    if (Math.random() < 0.05) { // 5% chance of a small hill
+                        z = 1;
                     }
-                    // Wider canopy for leaves
-                    for(let lx = -1; lx <= 1; lx++) {
-                        for(let ly = -1; ly <=1; ly++) {
-                            if (lx === 0 && ly === 0) continue; // trunk is here
-                            blocksToCreate.push({ x: x+lx, y: y+ly, z: z + 1, type: 'leaves', isWalkable: false });
-                            if (Math.random() < 0.5) blocksToCreate.push({ x: x+lx, y: y+ly, z: z + 2, type: 'leaves', isWalkable: false });
-                        }
+                    // Example: some tree trunks (make them unwalkable)
+                    if (Math.random() < 0.02) { // 2% chance of a tree trunk
+                        blockType = 'tree_trunk';
+                        z = Math.floor(Math.random() * 2) + 1; // Tree height 1 or 2
+                        isWalkable = false;
                     }
                 }
 
+                blocksToCreate.push({ x, y, z, type: blockType, isWalkable });
 
-                // Create simple river (e.g., a straight line or simple curve)
-                if (x > -MAP_SIZE * 0.2 && x < MAP_SIZE * 0.2 && y > 0 && distance < MAP_SIZE -5) { // River in the northern hemisphere, not too close to edge
-                    if (blockType !== 'stone' && blockType !== 'tree_trunk') { // Don't overwrite mountains/trees with river path
-                        blocksToCreate.push({ x, y, z: -1, type: 'water', isWalkable: false }); // River bed is lower
-                        blocksToCreate.push({ x, y, z: 0, type: 'water', isWalkable: false }); // Water surface
+                if (blockType === 'tree_trunk' && z > 0) {
+                    // Add leaves on top of tree trunks
+                    blocksToCreate.push({ x, y, z: z + 1, type: 'leaves', isWalkable: false });
+                    if (z > 1) { // Taller trees get more leaves
+                         blocksToCreate.push({ x, y, z: z + 2, type: 'leaves', isWalkable: false });
                     }
                 }
             }
         }
 
-        // Add some bridges over the river
-        for (let y_bridge = Math.floor(MAP_SIZE * 0.25); y_bridge < Math.floor(MAP_SIZE*0.8); y_bridge += Math.floor(MAP_SIZE * 0.25)) {
-            if (blocksToCreate.find(b => b.x === 0 && b.y === y_bridge && b.type === 'water')) { // Check if river exists at x=0 for this y
-                for (let bx = -1; bx <= 1; bx++) { // Bridge width
-                     blocksToCreate.push({ x: bx, y: y_bridge, z: 1, type: 'wood_plank', isWalkable: true });
-                }
-            }
-        }
-
+        // For a square map, river/bridge logic might need adjustment or simplification.
+        // Let's skip complex rivers/bridges for the first square version for simplicity.
 
         // Batch insert blocks
-        for (let i = 0; i < blocksToCreate.length; i += CHUNK_SIZE * CHUNK_SIZE) {
-            const chunk = blocksToCreate.slice(i, i + CHUNK_SIZE * CHUNK_SIZE);
-            await MinigameMapBlock.bulkCreate(chunk, { ignoreDuplicates: true }); // ignore if a specific xyz was already defined (e.g. bridge over water)
+        const totalBlocks = blocksToCreate.length;
+        for (let i = 0; i < totalBlocks; i += CHUNK_SIZE * CHUNK_SIZE) {
+            const chunk = blocksToCreate.slice(i, i + (CHUNK_SIZE * CHUNK_SIZE));
+            if (chunk.length > 0) {
+                 await MinigameMapBlock.bulkCreate(chunk, { ignoreDuplicates: true });
+            }
         }
 
-        console.log(`Admin: ${blocksToCreate.length} map blocks generated and attempted to save.`);
+        console.log(`Admin: ${totalBlocks} map blocks generated for square map.`);
 
-        // Add some random treasure boxes
+        // Add some random treasure boxes on walkable land
         const treasuresToCreate = [];
-        for (let i = 0; i < MAP_SIZE / 2; i++) { // Number of treasures based on map size
-            const randX = Math.floor(Math.random() * MAP_SIZE * 1.8) - MAP_SIZE * 0.9;
-            const randY = Math.floor(Math.random() * MAP_SIZE * 1.8) - MAP_SIZE * 0.9;
+        const numberOfTreasures = Math.floor((MAP_SIDE_LENGTH * MAP_SIDE_LENGTH) / 200); // Adjust density
+        for (let i = 0; i < numberOfTreasures; i++) {
+            const randX = Math.floor(Math.random() * (landEnd - landStart + 1)) + landStart;
+            const randY = Math.floor(Math.random() * (landEnd - landStart + 1)) + landStart;
 
-            // Find a walkable block at z=0 or z=1 to place treasure (simplified)
-            const groundBlock = blocksToCreate.find(b => b.x === randX && b.y === randY && (b.z === 0 || b.z ===1) && b.isWalkable);
+            // Find a walkable block at this x,y to place treasure
+            const groundBlock = blocksToCreate.find(b => b.x === randX && b.y === randY && b.isWalkable && b.type !== 'tree_trunk' && b.type !== 'leaves');
             if (groundBlock) {
                 treasuresToCreate.push({
                     positionX: randX,
                     positionY: randY,
-                    positionZ: groundBlock.z, // Place on the ground
+                    positionZ: groundBlock.z, // Place on the ground block's z
                     prizeType: Math.random() > 0.5 ? 'fuel' : 'score',
                     prizeAmount: Math.floor(Math.random() * (MINIGAME_CONSTANTS.TREASURE_BOX_DEFAULT_PRIZE_MAX - MINIGAME_CONSTANTS.TREASURE_BOX_DEFAULT_PRIZE_MIN + 1)) + MINIGAME_CONSTANTS.TREASURE_BOX_DEFAULT_PRIZE_MIN,
                     isOpened: false,
                 });
             }
         }
-        await MinigameTreasureBox.bulkCreate(treasuresToCreate, { ignoreDuplicates: true });
-        console.log(`Admin: ${treasuresToCreate.length} treasure boxes generated.`);
+        if (treasuresToCreate.length > 0) {
+            await MinigameTreasureBox.bulkCreate(treasuresToCreate, { ignoreDuplicates: true });
+        }
+        console.log(`Admin: ${treasuresToCreate.length} treasure boxes generated for square map.`);
 
-        if(res) return res.json({ success: true, message: "نقشه اولیه با موفقیت ساخته شد." });
+        if(res) return res.json({ success: true, message: "نقشه مربعی اولیه با موفقیت ساخته شد." });
         else console.log("Map initialization complete (no HTTP response as likely called internally).")
 
     } catch (error) {
@@ -817,3 +772,5 @@ exports.initializeNewMap = async (req, res) => {
         if(res) return res.status(500).json({ message: "خطا در ساخت نقشه اولیه." });
     }
 };
+
+[end of app/controllers/minigameController.js]
