@@ -1,4 +1,4 @@
-const { GameMap, Tile, Wall, DeployedAmmunition, Ammunition, Group, sequelize } = require('../models');
+const { GameMap, Tile, Wall, DeployedAmmunition, Ammunition, Group, AttackWave, sequelize } = require('../models');
 const { Op } = require('sequelize');
 
 class GameEngine {
