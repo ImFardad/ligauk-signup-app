@@ -1,4 +1,5 @@
 const { Tile, Wall, Group, GameMap, DeployedAmmunition, AmmunitionInventory, Ammunition, AttackWave, sequelize } = require('../models');
+const { Op } = require('sequelize'); // Import Op
 const { generateDistinctColors } = require('../utils/colorGenerator');
 
 // Helper function to create initial walls for a tile
