@@ -97,21 +97,24 @@ exports.updateMap = async (req, res) => {
 
 
 exports.createAttackWave = async (req, res) => {
-    // Parameters from request body
+    // Destructure all expected parameters from req.body at the beginning
     const { mapId, power, durationValue, durationUnit, isPowerVisible } = req.body;
 
-    // Validate required fields
+    // Validate required fields using the destructured variables
     if (mapId === undefined || power === undefined || durationValue === undefined || durationUnit === undefined) {
-        return res.status(400).json({ message: "شناسه نقشه، قدرت، مقدار و واحد زمان برای حمله الزامی است." });
+        return res.status(400).json({ message: "شناسه نقشه، قدرت، مقدار زمان و واحد زمان برای حمله الزامی است." });
     }
 
-    // Validate and parse durationValue
+    const numPower = parseInt(power);
+    if (isNaN(numPower) || numPower <= 0) {
+        return res.status(400).json({ message: "قدرت حمله باید یک عدد مثبت باشد." });
+    }
+
     const numDuration = parseInt(durationValue);
     if (isNaN(numDuration) || numDuration <= 0) {
         return res.status(400).json({ message: "مقدار زمان باید یک عدد مثبت باشد." });
     }
 
-    // Convert duration to milliseconds
     let durationInMilliseconds;
     switch (durationUnit) {
         case 'minutes':
@@ -127,11 +130,9 @@ exports.createAttackWave = async (req, res) => {
             return res.status(400).json({ message: "واحد زمان نامعتبر است. گزینه‌های مجاز: 'minutes', 'hours', 'days'." });
     }
 
-    // Calculate the absolute attack time
-    const calculatedAttackTime = new Date(Date.now() + durationInMilliseconds);
+    const finalAttackTime = new Date(Date.now() + durationInMilliseconds); // Renamed to avoid any possible scope collision
 
     try {
-        // Find the map to ensure it exists and is active
         const map = await GameMap.findByPk(mapId);
         if (!map) {
             return res.status(404).json({ message: "نقشه مورد نظر یافت نشد." });
