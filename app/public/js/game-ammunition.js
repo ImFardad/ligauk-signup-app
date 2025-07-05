@@ -155,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 userScore = data.score;
                  if (ammunitionSection.classList.contains('active')) {
                     renderAmmunitionStore();
-                    showAlert('انبار و امتیاز شما به‌روز شد.', 'info', 1500);
+                    sendNotification('info', 'انبار و امتیاز شما به‌روز شد.'); // Corrected showAlert to sendNotification
                 }
             }
         });
