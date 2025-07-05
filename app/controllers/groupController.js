@@ -91,6 +91,7 @@ exports.getMyGroup = async (req, res) => {
 
     // واکشی اطلاعات گروه با سرگروه
     const group = await Group.findByPk(membership.groupId, {
+      attributes: ['id', 'name', 'code', 'walletCode', 'score', 'color', 'leaderId'], // Added color
       include: [
         { model: User, as:'leader', attributes:['id','firstName','lastName'] }
       ]
@@ -113,7 +114,7 @@ exports.getMyGroup = async (req, res) => {
     );
     const rank = rankResult[0].rank;
 
-    res.json({
+    res.json({ // This will be the response for /api/groups/my-group-details as well
       member: true,
       role: membership.role,
       group: {
@@ -122,7 +123,9 @@ exports.getMyGroup = async (req, res) => {
         code: group.code,
         walletCode: group.walletCode,
         score: group.score,
+        color: group.color, // Added color
         rank,
+        leader: group.leader, // Pass leader info
         members: members.map(u => ({ id:u.id, name:`${u.firstName} ${u.lastName}`, role:u.GroupMember.role }))
       }
     });

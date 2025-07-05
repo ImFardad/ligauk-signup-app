@@ -14,16 +14,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function fetchUserGroupData() {
         try {
-            const response = await axios.get('/api/groups/my-group-details');
-            if (response.data && response.data.id) {
-                userGroupId = response.data.id;
+            const response = await axios.get('/api/groups/my'); // Using /my which now returns detailed group info
+            if (response.data && response.data.member && response.data.group && response.data.group.id) {
+                userGroupId = response.data.group.id;
+                console.log("User Group ID fetched for game:", userGroupId);
+            } else if (response.data && !response.data.member) {
+                 console.warn("کاربر عضو هیچ گروهی نیست. بازی دفاع از قلمرو ممکن است محدود باشد.");
+                 sendNotification('info', "شما برای استفاده از تمام قابلیت‌های دفاع از قلمرو باید عضو یک گروه باشید.");
+                 userGroupId = null; // Explicitly set to null
             } else {
-                const groupCard = document.querySelector('#group-info-card[data-group-id]');
-                if(groupCard) userGroupId = groupCard.dataset.groupId;
+                 console.warn("پاسخ API برای اطلاعات گروه کاربر، معتبر نبود.");
+                 userGroupId = null; // Explicitly set to null
             }
-            if(!userGroupId) console.warn("شناسه گروه کاربر برای بازی دفاع از قلمرو یافت نشد.");
         } catch (error) {
             console.error("Error fetching user group data for game:", error);
+            if (error.response && error.response.status === 404) {
+                sendNotification('warning', "اطلاعات گروه شما یافت نشد. برای بازی، لطفاً ابتدا به یک گروه بپیوندید یا یک گروه ایجاد کنید.");
+            } else {
+                sendNotification('error', "خطا در دریافت اطلاعات گروه کاربر.");
+            }
+            userGroupId = null; // Ensure it's null on error
         }
     }
 
