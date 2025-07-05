@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const quantity = parseInt(quantityInput.value);
 
                 if (isNaN(quantity) || quantity <= 0) {
-                    showAlert('لطفاً تعداد معتبر برای خرید وارد کنید.', 'warning');
+                    sendNotification('warning', 'لطفاً تعداد معتبر برای خرید وارد کنید.');
                     return;
                 }
 
@@ -129,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showGlobalLoading(true);
                 try {
                     const response = await axios.post('/api/game/ammunition/buy', { ammunitionId, quantity });
-                    showAlert('مهمات با موفقیت خریداری شد!', 'success');
+                    sendNotification('success', 'مهمات با موفقیت خریداری شد!');
                     // Update inventory and score from response or via socket
                     if (response.data.inventory && response.data.newScore !== undefined) {
                         userInventory = response.data.inventory;

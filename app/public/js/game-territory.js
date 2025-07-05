@@ -200,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
         buyButtons.forEach(button => {
             button.addEventListener('click', async (e) => {
                 if (currentActiveMap.gameLocked) {
-                    showAlert('بازی قفل شده است، امکان خرید وجود ندارد.', 'error');
+                    sendNotification('error', 'بازی قفل شده است، امکان خرید وجود ندارد.');
                     return;
                 }
                 const tileElement = e.target.closest('.tile');
