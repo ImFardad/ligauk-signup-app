@@ -11,7 +11,18 @@ const adminGameManagementMixin = {
 
     // Attacks Tab
     attackWaves: [],
-    newAttackForm: { mapId: '', power: 100, attackTime: '', isPowerVisible: true },
+    newAttackForm: {
+        mapId: '',
+        power: 100,
+        durationValue: 30,
+        durationUnit: 'minutes', // 'minutes', 'hours', 'days'
+        isPowerVisible: true
+    },
+    attackDurationUnits: [
+        { value: 'minutes', text: 'دقیقه' },
+        { value: 'hours', text: 'ساعت' },
+        { value: 'days', text: 'روز' },
+    ],
     availableMapsForAttack: [], // For dropdown in attack form
 
     // Ammunition Tab
@@ -134,19 +145,33 @@ const adminGameManagementMixin = {
         }
     },
     async scheduleNewAttack() {
-        if (!this.newAttackForm.mapId || !this.newAttackForm.power || !this.newAttackForm.attackTime) {
-            this.sendNotification('error', 'انتخاب نقشه، قدرت و زمان حمله الزامی است.');
+        if (!this.newAttackForm.mapId || !this.newAttackForm.power || this.newAttackForm.durationValue === undefined || !this.newAttackForm.durationUnit) {
+            this.sendNotification('error', 'انتخاب نقشه، قدرت، مقدار زمان و واحد زمان الزامی است.');
             return;
         }
-        if (new Date(this.newAttackForm.attackTime) <= new Date()) {
-             this.sendNotification('error', 'زمان حمله باید در آینده باشد.');
+        if (parseInt(this.newAttackForm.durationValue) <= 0) {
+             this.sendNotification('error', 'مقدار زمان باید عددی مثبت باشد.');
             return;
         }
         this.setLoadingState(true);
         try {
-            await axios.post('/admin/api/game/attack-waves', this.newAttackForm);
+            // Payload now includes durationValue and durationUnit instead of attackTime
+            const payload = {
+                mapId: this.newAttackForm.mapId,
+                power: parseInt(this.newAttackForm.power),
+                durationValue: parseInt(this.newAttackForm.durationValue),
+                durationUnit: this.newAttackForm.durationUnit,
+                isPowerVisible: this.newAttackForm.isPowerVisible
+            };
+            await axios.post('/admin/api/game/attack-waves', payload);
             this.sendNotification('success', 'موج حمله جدید با موفقیت زمان‌بندی شد.');
-            this.newAttackForm = { mapId: this.availableMapsForAttack.length > 0 ? this.availableMapsForAttack[0].id : '', power: 100, attackTime: '', isPowerVisible: true };
+            this.newAttackForm = {
+                mapId: this.availableMapsForAttack.length > 0 ? this.availableMapsForAttack[0].id : '',
+                power: 100,
+                durationValue: 30,
+                durationUnit: 'minutes',
+                isPowerVisible: true
+            };
             await this.fetchAttackWaves();
         } catch (error) {
             this.sendNotification('error', 'خطا در زمان‌بندی موج حمله: ' + (error.response?.data?.message || error.message));

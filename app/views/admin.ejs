@@ -756,9 +756,17 @@
               <label class="block text-sm mb-1">قدرت حمله:</label>
               <input v-model.number="newAttackForm.power" type="number" min="10" placeholder="قدرت" class="input-field w-full">
             </div>
-            <div>
-              <label class="block text-sm mb-1">زمان حمله:</label>
-              <input v-model="newAttackForm.attackTime" type="datetime-local" class="input-field w-full" style="color-scheme: dark;">
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-sm mb-1">مقدار زمان:</label>
+                <input v-model.number="newAttackForm.durationValue" type="number" min="1" placeholder="مثلا 30" class="input-field w-full">
+              </div>
+              <div>
+                <label class="block text-sm mb-1">واحد زمان:</label>
+                <select v-model="newAttackForm.durationUnit" class="input-field w-full">
+                  <option v-for="unit in attackDurationUnits" :key="unit.value" :value="unit.value">{{ unit.text }}</option>
+                </select>
+              </div>
             </div>
             <button @click="scheduleNewAttack" class="btn-primary h-10">زمان‌بندی حمله</button>
             <div class="md:col-span-full">
