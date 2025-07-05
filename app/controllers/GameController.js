@@ -1,5 +1,5 @@
-const { Tile, Wall, Group, GameMap, DeployedAmmunition, AmmunitionInventory, Ammunition, sequelize } = require('../models');
-const { generateDistinctColors } = require('../utils/colorGenerator'); // Utility to be created
+const { Tile, Wall, Group, GameMap, DeployedAmmunition, AmmunitionInventory, Ammunition, AttackWave, sequelize } = require('../models');
+const { generateDistinctColors } = require('../utils/colorGenerator');
 
 // Helper function to create initial walls for a tile
 const createInitialWalls = async (tileId, transaction) => {
