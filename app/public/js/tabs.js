@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', function(){
             item.addEventListener('click', handleMenuClick);
         });
     }
-    
+
     function handleMenuClick(e) {
         e.preventDefault();
         const clickedItem = e.currentTarget; // Use currentTarget for dynamically added listeners
@@ -51,18 +51,26 @@ document.addEventListener('DOMContentLoaded', function(){
         if (currentActiveSection && currentActiveSection.id === id) return; // Already active
 
         if (currentActiveSection) {
-            currentActiveSection.classList.remove('fade-in');
+            currentActiveSection.classList.remove('fade-in'); // Remove fade-in if it was there
             currentActiveSection.classList.add('fade-out');
-            // Instead of transitionend, which can be tricky if transitions are disabled or short,
-            // use a timeout or simply hide after starting fade-out.
-            // For simplicity, we'll hide immediately and show next.
-            // Proper handling of transitionend is better for smoother UX.
-            currentActiveSection.classList.remove('active');
-            currentActiveSection.classList.add('hidden'); // Ensure it's hidden
-            currentActiveSection.classList.remove('fade-out');
+            currentActiveSection.addEventListener('transitionend', function handler(e) {
+                // Ensure we are reacting to the transition of the correct element
+                if (e.target === currentActiveSection) {
+                    currentActiveSection.classList.remove('active', 'fade-out');
+                    currentActiveSection.classList.add('hidden'); // Ensure it's hidden after fade out
+                    currentActiveSection.removeEventListener('transitionend', handler);
+                }
+            }, { once: true });
+            // Fallback if transitionend doesn't fire (e.g. display:none was already set or no transition)
+            setTimeout(() => {
+                 if (currentActiveSection.classList.contains('fade-out')) { // Check if still intended to be hidden
+                    currentActiveSection.classList.remove('active', 'fade-out');
+                    currentActiveSection.classList.add('hidden');
+                 }
+            }, 350); // Slightly longer than transition duration (0.3s)
         }
 
-        nextSectionToShow.classList.remove('hidden'); // Make sure it's not hidden by default
+        nextSectionToShow.classList.remove('hidden', 'fade-out'); // Ensure it's visible and not fading out
         nextSectionToShow.classList.add('active');
         // Force reflow before adding fade-in for transition to work
         void nextSectionToShow.offsetWidth;
