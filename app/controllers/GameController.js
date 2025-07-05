@@ -83,8 +83,8 @@ exports.buyTile = async (req, res) => {
             const existingColors = (await Group.findAll({
                 attributes: ['color'],
                 where: {
-                    color: { [sequelize.Op.ne]: null },
-                    id: { [sequelize.Op.ne]: group.id } // Exclude current group if it somehow had a color being reset
+                    color: { [Op.ne]: null }, // Changed from sequelize.Op.ne to Op.ne
+                    id: { [Op.ne]: group.id } // Changed from sequelize.Op.ne to Op.ne
                 },
                 transaction
             })).map(g => g.color);
@@ -325,7 +325,7 @@ exports.getFullMapState = async (mapId) => {
             {
                 model: AttackWave,
                 as: 'attackWaves',
-                where: { isExecuted: false, attackTime: { [Op.gt]: new Date() } }, // Changed from sequelize.Op.gt to Op.gt
+                    where: { isExecuted: false, attackTime: { [Op.gt]: new Date() } },
                 order: [['attackTime', 'ASC']],
                 limit: 1,
                 required: false,
