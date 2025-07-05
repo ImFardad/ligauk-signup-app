@@ -325,7 +325,7 @@ exports.getFullMapState = async (mapId) => {
             {
                 model: AttackWave,
                 as: 'attackWaves',
-                where: { isExecuted: false, attackTime: { [sequelize.Op.gt]: new Date() } },
+                where: { isExecuted: false, attackTime: { [Op.gt]: new Date() } }, // Changed from sequelize.Op.gt to Op.gt
                 order: [['attackTime', 'ASC']],
                 limit: 1,
                 required: false,
