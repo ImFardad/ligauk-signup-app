@@ -310,7 +310,15 @@ const start = async () => {
             db.Currency, db.Wallet, db.UniqueItem, db.Question,
             db.PurchasedQuestion, db.SubmittedCombo, db.Announcement,
             db.AnnouncementAttachment, db.Content, db.ContentAttachment,
-            db.FeatureFlag, db.QuestionBankSetting
+            db.FeatureFlag, db.QuestionBankSetting,
+            // Game Models for AdminJS
+            db.GameMap,
+            db.Tile,
+            db.Wall,
+            db.Ammunition,
+            db.AmmunitionInventory,
+            db.DeployedAmmunition,
+            db.AttackWave
         ],
         rootPath: '/super-admin', 
         branding: {
