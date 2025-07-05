@@ -10,7 +10,8 @@ new Vue({
     adminUniqueItemsMixin,
     adminFeaturesMixin,
     adminRadioMixin,
-    adminQuestionBankMixin // Added Question Bank Mixin
+    adminQuestionBankMixin, // Added Question Bank Mixin
+    adminGameManagementMixin // New Mixin for Territory Defense Game Management
   ],
   data: {
     editingId: null,
@@ -22,9 +23,10 @@ new Vue({
       { key: 'groups', label: 'گروه‌ها' },
       { key: 'items', label: 'فروشگاه' },
       { key: 'contents', label: 'محتواها' },
-      { key: 'question_bank_questions', label: 'طرح سوال (بانک سوال)' }, // New Section for UI
-      { key: 'question_bank_correction', label: 'تصحیح سوالات (بانک سوال)' }, // New Section for UI
-      { key: 'question_bank_settings', label: 'تنظیمات بانک سوال' }, // New Section for UI (Admin Only)
+      { key: 'game_management', label: 'مدیریت دفاع از قلمرو', featureFlag: 'admin_game_management' }, // New Admin Section
+      { key: 'question_bank_questions', label: 'طرح سوال (بانک سوال)' },
+      { key: 'question_bank_correction', label: 'تصحیح سوالات (بانک سوال)' },
+      { key: 'question_bank_settings', label: 'تنظیمات بانک سوال' },
       { key: 'features', label: 'مدیریت رویدادها' },
       { key: 'radio', label: 'رادیو' }
     ],

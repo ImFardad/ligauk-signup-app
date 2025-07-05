@@ -22,6 +22,10 @@ module.exports = (sequelize, DataTypes) => {
       validate: {
         min: 0
       }
+    },
+    color: {
+      type: DataTypes.STRING,
+      allowNull: true // Or false if a color is always required once a group joins a game
     }
   }, {
     hooks: {

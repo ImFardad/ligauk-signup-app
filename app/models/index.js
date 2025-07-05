@@ -39,6 +39,15 @@ db.Question                = require('./question')(sequelize, DataTypes);
 db.PurchasedQuestion       = require('./purchasedQuestion')(sequelize, DataTypes);
 db.SubmittedCombo          = require('./submittedCombo')(sequelize, DataTypes);
 
+// Game Models
+db.GameMap                 = require('./GameMap')(sequelize, DataTypes);
+db.Tile                    = require('./Tile')(sequelize, DataTypes);
+db.Wall                    = require('./Wall')(sequelize, DataTypes);
+db.Ammunition              = require('./Ammunition')(sequelize, DataTypes);
+db.AmmunitionInventory     = require('./AmmunitionInventory')(sequelize, DataTypes);
+db.DeployedAmmunition      = require('./DeployedAmmunition')(sequelize, DataTypes);
+db.AttackWave              = require('./AttackWave')(sequelize, DataTypes);
+
 Object.values(db).forEach(model => {
   if (typeof model.associate === 'function') {
     model.associate(db);

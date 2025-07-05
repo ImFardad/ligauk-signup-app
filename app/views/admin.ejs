@@ -647,6 +647,281 @@
         </div>
       </section>
 
+      <!-- Territory Defense Game Management Section -->
+      <section id="game_management" v-show="activeSection==='game_management'" class="content-section" :class="{'active fade-in': activeSection==='game_management'}">
+        <h2 class="text-2xl font-bold mb-6 text-center border-b pb-3 border-gray-700">مدیریت بازی دفاع از قلمرو</h2>
+
+        <!-- Tabs for Game Management -->
+        <div class="flex border-b border-gray-600 mb-6">
+          <button @click="selectGameManagementTab('maps')"
+                  :class="{'border-blue-500 text-blue-400': gameManagementActiveTab === 'maps', 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500': gameManagementActiveTab !== 'maps'}"
+                  class="py-3 px-5 font-medium border-b-2 focus:outline-none">
+            <i class="fas fa-map mr-2"></i>مدیریت نقشه‌ها
+          </button>
+          <button @click="selectGameManagementTab('attacks')"
+                  :class="{'border-blue-500 text-blue-400': gameManagementActiveTab === 'attacks', 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500': gameManagementActiveTab !== 'attacks'}"
+                  class="py-3 px-5 font-medium border-b-2 focus:outline-none">
+            <i class="fas fa-bolt mr-2"></i>مدیریت حملات
+          </button>
+          <button @click="selectGameManagementTab('ammunition')"
+                  :class="{'border-blue-500 text-blue-400': gameManagementActiveTab === 'ammunition', 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500': gameManagementActiveTab !== 'ammunition'}"
+                  class="py-3 px-5 font-medium border-b-2 focus:outline-none">
+            <i class="fas fa-archive mr-2"></i>مدیریت مهمات
+          </button>
+          <button @click="selectGameManagementTab('settings')"
+                  :class="{'border-blue-500 text-blue-400': gameManagementActiveTab === 'settings', 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500': gameManagementActiveTab !== 'settings'}"
+                  class="py-3 px-5 font-medium border-b-2 focus:outline-none">
+            <i class="fas fa-cogs mr-2"></i>تنظیمات کلی
+          </button>
+           <button @click="selectGameManagementTab('reset')"
+                  :class="{'border-red-500 text-red-400': gameManagementActiveTab === 'reset', 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500': gameManagementActiveTab !== 'reset'}"
+                  class="py-3 px-5 font-medium border-b-2 focus:outline-none">
+            <i class="fas fa-undo mr-2"></i>ریست بازی
+          </button>
+        </div>
+
+        <!-- Maps Tab Content -->
+        <div v-if="gameManagementActiveTab === 'maps'">
+          <h3 class="text-xl font-semibold mb-4">ایجاد نقشه جدید</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-gray-700 p-4 rounded-lg">
+            <input v-model.trim="newMapForm.name" placeholder="نام نقشه" class="input-field">
+            <input v-model.number="newMapForm.size" type="number" min="5" max="100" placeholder="اندازه (مثلا 20 برای 20x20)" class="input-field">
+            <button @click="createNewMap" class="btn-primary">ایجاد نقشه</button>
+          </div>
+
+          <h3 class="text-xl font-semibold mb-4">لیست نقشه‌های موجود</h3>
+          <div class="overflow-x-auto">
+            <table class="admin-table w-full compact-table">
+              <thead>
+                <tr><th>نام نقشه</th><th>اندازه</th><th>وضعیت</th><th>قفل بازی</th><th>تاریخ ایجاد</th><th>عملیات</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="map in gameMaps" :key="map.id">
+                  <td>{{ map.name }}</td>
+                  <td class="text-center">{{ map.size }}x{{ map.size }}</td>
+                  <td class="text-center" :class="map.isActive ? 'text-green-400' : 'text-gray-500'">{{ map.isActive ? 'فعال' : 'غیرفعال' }}</td>
+                  <td class="text-center" :class="map.gameLocked ? 'text-yellow-400' : 'text-green-400'">{{ map.gameLocked ? 'قفل شده' : 'باز' }}</td>
+                  <td>{{ formatDateForDisplay(map.createdAt) }}</td>
+                  <td class="text-center">
+                    <button @click="openEditMapModal(map)" class="btn-secondary text-xs px-2 py-1">ویرایش</button>
+                  </td>
+                </tr>
+                <tr v-if="!gameMaps.length"><td colspan="6" class="text-center py-3">هیچ نقشه‌ای یافت نشد.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- Edit Map Modal -->
+          <div v-if="editingMap" class="modal-backdrop">
+            <div class="modal-content">
+              <h4 class="text-lg font-bold mb-3">ویرایش نقشه: {{ editingMap.name }}</h4>
+              <div class="space-y-3">
+                <div><label class="block text-sm">نام نقشه:</label><input v-model.trim="editingMap.name" class="input-field w-full"></div>
+                <div>
+                  <label class="block text-sm">وضعیت:</label>
+                  <select v-model="editingMap.isActive" class="input-field w-full">
+                    <option :value="true">فعال</option>
+                    <option :value="false">غیرفعال</option>
+                  </select>
+                  <p class="text-xs text-gray-400 mt-1">فعال کردن این نقشه، سایر نقشه‌های فعال را غیرفعال می‌کند.</p>
+                </div>
+                <div>
+                  <label class="block text-sm">وضعیت قفل بازی:</label>
+                  <select v-model="editingMap.gameLocked" class="input-field w-full">
+                    <option :value="true">قفل شده (خرید/ارتقا ممنوع)</option>
+                    <option :value="false">باز</option>
+                  </select>
+                </div>
+                <p class="text-sm text-gray-400">اندازه نقشه پس از ایجاد قابل تغییر نیست.</p>
+              </div>
+              <div class="flex justify-end space-x-2 mt-5">
+                <button @click="cancelEditMap" class="btn-secondary">انصراف</button>
+                <button @click="saveMapChanges" class="btn-primary">ذخیره تغییرات</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Attacks Tab Content -->
+        <div v-if="gameManagementActiveTab === 'attacks'">
+          <h3 class="text-xl font-semibold mb-4">زمان‌بندی موج حمله جدید</h3>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6 bg-gray-700 p-4 rounded-lg items-end">
+            <div class="md:col-span-2">
+              <label class="block text-sm mb-1">انتخاب نقشه فعال:</label>
+              <select v-model="newAttackForm.mapId" class="input-field w-full">
+                <option value="">-- انتخاب نقشه --</option>
+                <option v-for="map in availableMapsForAttack" :key="map.id" :value="map.id">{{ map.name }} ({{map.size}}x{{map.size}})</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm mb-1">قدرت حمله:</label>
+              <input v-model.number="newAttackForm.power" type="number" min="10" placeholder="قدرت" class="input-field w-full">
+            </div>
+            <div>
+              <label class="block text-sm mb-1">زمان حمله:</label>
+              <input v-model="newAttackForm.attackTime" type="datetime-local" class="input-field w-full" style="color-scheme: dark;">
+            </div>
+            <button @click="scheduleNewAttack" class="btn-primary h-10">زمان‌بندی حمله</button>
+            <div class="md:col-span-full">
+              <label class="inline-flex items-center">
+                <input type="checkbox" v-model="newAttackForm.isPowerVisible" class="form-checkbox h-5 w-5 text-blue-500 bg-gray-800 border-gray-600 rounded focus:ring-blue-400">
+                <span class="ml-2 text-sm">قدرت حمله برای کاربران قابل مشاهده باشد</span>
+              </label>
+            </div>
+          </div>
+          <h3 class="text-xl font-semibold mb-4">اجرای دستی موج حمله بعدی (برای نقشه فعال انتخاب شده)</h3>
+           <div class="flex items-center space-x-3 mb-6 bg-gray-700 p-4 rounded-lg">
+              <select v-model="newAttackForm.mapId" class="input-field">
+                <option value="">-- انتخاب نقشه برای اجرای دستی --</option>
+                <option v-for="map in availableMapsForAttack" :key="map.id" :value="map.id">{{ map.name }}</option>
+              </select>
+              <button @click="executeAttackWaveManually(newAttackForm.mapId)" class="btn-danger" :disabled="!newAttackForm.mapId">اجرای دستی موج بعدی</button>
+              <p class="text-xs text-yellow-400">این عمل موج حمله بعدی (اگر زمانش رسیده باشد) را برای نقشه انتخاب شده اجرا می‌کند.</p>
+          </div>
+
+
+          <h3 class="text-xl font-semibold mb-4">لیست امواج حمله تعریف شده</h3>
+          <div class="overflow-x-auto">
+            <table class="admin-table w-full compact-table">
+              <thead><tr><th>نقشه</th><th>قدرت</th><th>زمان حمله</th><th>قدرت قابل مشاهده</th><th>وضعیت</th></tr></thead>
+              <tbody>
+                <tr v-for="wave in attackWaves" :key="wave.id">
+                  <td>{{ wave.map ? wave.map.name : wave.MapId }}</td>
+                  <td class="text-center">{{ wave.power }}</td>
+                  <td>{{ formatDateForDisplay(wave.attackTime) }}</td>
+                  <td class="text-center" :class="wave.isPowerVisible ? 'text-green-400':'text-gray-500'">{{ wave.isPowerVisible ? 'بله' : 'خیر' }}</td>
+                  <td class="text-center" :class="wave.isExecuted ? 'text-red-400':'text-green-400'">{{ wave.isExecuted ? 'اجرا شده' : 'در انتظار' }}</td>
+                </tr>
+                <tr v-if="!attackWaves.length"><td colspan="5" class="text-center py-3">هیچ موج حمله‌ای یافت نشد.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Ammunition Tab Content -->
+        <div v-if="gameManagementActiveTab === 'ammunition'">
+          <h3 class="text-xl font-semibold mb-4">ایجاد مهمات جدید</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-gray-700 p-4 rounded-lg items-start">
+            <input v-model.trim="newAmmunitionForm.name" placeholder="نام مهمات" class="input-field">
+            <input v-model.number="newAmmunitionForm.price" type="number" min="0" placeholder="قیمت (امتیاز)" class="input-field">
+            <input v-model.number="newAmmunitionForm.health" type="number" min="1" placeholder="سلامت پایه مهمات" class="input-field">
+            <input v-model.number="newAmmunitionForm.defenseLine" type="number" min="1" placeholder="خط دفاعی (عدد بالاتر خارجی‌تر)" class="input-field">
+            <input v-model.number="newAmmunitionForm.maxPerWall" type="number" min="1" placeholder="حداکثر در هر دیوار" class="input-field">
+            <div class="md:col-span-1 flex items-center">
+              <input type="checkbox" id="newAmmoIsVisible" v-model="newAmmunitionForm.isVisible" class="form-checkbox h-5 w-5 text-blue-500 bg-gray-800 border-gray-600 rounded focus:ring-blue-400">
+              <label for="newAmmoIsVisible" class="ml-2 text-sm">در فروشگاه نمایش داده شود</label>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-sm mb-1">عکس مهمات (اختیاری، کمتر از 5MB):</label>
+              <input type="file" @change="handleAmmunitionImageUpload($event, 'new')" id="newAmmoImageFile" accept="image/jpeg,image/png,image/gif" class="input-field file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700">
+              <img v-if="newAmmunitionForm.imagePreview" :src="newAmmunitionForm.imagePreview" alt="پیش‌نمایش" class="mt-2 h-20 w-20 object-cover rounded border border-gray-500">
+               <button v-if="newAmmunitionForm.imagePreview" @click="clearAmmunitionImagePreview('new')" class="text-xs text-red-400 hover:text-red-300 mt-1">حذف پیش‌نمایش</button>
+            </div>
+            <div class="md:col-span-3 text-right">
+              <button @click="saveNewAmmunition" class="btn-primary">ایجاد مهمات</button>
+            </div>
+          </div>
+
+          <h3 class="text-xl font-semibold mb-4">لیست مهمات موجود</h3>
+          <div class="overflow-x-auto">
+            <table class="admin-table w-full compact-table">
+              <thead><tr><th>عکس</th><th>نام</th><th>قیمت</th><th>سلامت</th><th>خط دفاعی</th><th>Max/دیوار</th><th>نمایش</th><th>عملیات</th></tr></thead>
+              <tbody>
+                <tr v-for="ammo in gameAmmunitions" :key="ammo.id">
+                  <td><img :src="ammo.image || 'https://via.placeholder.com/40?text=N/A'" :alt="ammo.name" class="h-10 w-10 object-cover rounded"></td>
+                  <td>{{ ammo.name }}</td>
+                  <td class="text-center">{{ ammo.price }}</td>
+                  <td class="text-center">{{ ammo.health }}</td>
+                  <td class="text-center">{{ ammo.defenseLine }}</td>
+                  <td class="text-center">{{ ammo.maxPerWall }}</td>
+                  <td class="text-center" :class="ammo.isVisible ? 'text-green-400':'text-gray-500'">{{ ammo.isVisible ? 'بله' : 'خیر' }}</td>
+                  <td class="text-center whitespace-nowrap">
+                    <button @click="openEditAmmunitionModal(ammo)" class="btn-secondary text-xs px-2 py-1 mr-1">ویرایش</button>
+                    <button @click="deleteGameAmmunition(ammo.id)" class="btn-danger text-xs px-2 py-1">حذف</button>
+                  </td>
+                </tr>
+                <tr v-if="!gameAmmunitions.length"><td colspan="8" class="text-center py-3">هیچ مهماتی یافت نشد.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- Edit Ammunition Modal -->
+          <div v-if="editingAmmunition" class="modal-backdrop">
+            <div class="modal-content">
+              <h4 class="text-lg font-bold mb-3">ویرایش مهمات: {{ editingAmmunition.name }}</h4>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                <input v-model.trim="editingAmmunition.name" placeholder="نام مهمات" class="input-field">
+                <input v-model.number="editingAmmunition.price" type="number" min="0" placeholder="قیمت" class="input-field">
+                <input v-model.number="editingAmmunition.health" type="number" min="1" placeholder="سلامت پایه" class="input-field">
+                <input v-model.number="editingAmmunition.defenseLine" type="number" min="1" placeholder="خط دفاعی" class="input-field">
+                <input v-model.number="editingAmmunition.maxPerWall" type="number" min="1" placeholder="حداکثر/دیوار" class="input-field">
+                <div class="flex items-center">
+                  <input type="checkbox" :id="'editAmmoIsVisible'+editingAmmunition.id" v-model="editingAmmunition.isVisible" class="form-checkbox h-5 w-5">
+                  <label :for="'editAmmoIsVisible'+editingAmmunition.id" class="ml-2 text-sm">نمایش در فروشگاه</label>
+                </div>
+                <div class="md:col-span-2">
+                  <label class="block text-sm mb-1">عکس مهمات (اختیاری، برای تغییر یا افزودن):</label>
+                  <input type="file" @change="handleAmmunitionImageUpload($event, 'edit')" id="editAmmoImageFile" accept="image/jpeg,image/png,image/gif" class="input-field file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700">
+                  <div class="mt-2 flex items-center">
+                    <img v-if="editingAmmunition.imagePreview" :src="editingAmmunition.imagePreview" alt="پیش‌نمایش" class="h-20 w-20 object-cover rounded border border-gray-500">
+                    <p v-else-if="editingAmmunition.image" class="text-xs text-gray-400">عکس فعلی: {{ editingAmmunition.image.split('/').pop() }}</p>
+                    <p v-else class="text-xs text-gray-400">بدون عکس</p>
+                    <button v-if="editingAmmunition.imagePreview || editingAmmunition.image" @click="clearAmmunitionImagePreview('edit')" class="text-xs text-red-400 hover:text-red-300 ml-2">حذف/تغییر عکس</button>
+                  </div>
+                </div>
+              </div>
+              <div class="flex justify-end space-x-2 mt-5">
+                <button @click="cancelEditAmmunition" class="btn-secondary">انصراف</button>
+                <button @click="saveAmmunitionChanges" class="btn-primary">ذخیره تغییرات</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings Tab Content -->
+        <div v-if="gameManagementActiveTab === 'settings'">
+          <h3 class="text-xl font-semibold mb-4">تنظیمات قیمت‌گذاری</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-gray-700 p-4 rounded-lg">
+              <h4 class="text-lg font-medium mb-2">قیمت پیش‌فرض املاک (Tile)</h4>
+              <p class="text-xs text-gray-400 mb-2">این قیمت برای املاک بدون صاحب که جدیداً خریداری می‌شوند اعمال می‌شود.</p>
+              <label class="block text-sm mb-1">نقشه مورد نظر (اختیاری، برای اعمال قیمت فقط روی آن نقشه):</label>
+              <select v-model="tilePriceSettings.mapIdForPrice" class="input-field w-full mb-2">
+                  <option value="">همه نقشه‌های فعال (پیش‌فرض)</option>
+                  <option v-for="map in gameMaps.filter(m => m.isActive)" :key="map.id" :value="map.id">{{ map.name }}</option>
+              </select>
+              <label class="block text-sm mb-1">قیمت پیش‌فرض هر ملک (امتیاز):</label>
+              <input v-model.number="tilePriceSettings.defaultTilePrice" type="number" min="0" class="input-field w-full mb-3">
+              <button @click="saveTilePriceSettings" class="btn-primary w-full">ذخیره قیمت املاک</button>
+            </div>
+            <div class="bg-gray-700 p-4 rounded-lg">
+              <h4 class="text-lg font-medium mb-2">هزینه ارتقا دیوارها (نمایشی)</h4>
+              <p class="text-xs text-gray-400 mb-2">این هزینه‌ها در حال حاضر در کد برنامه ثابت هستند. برای تغییر، نیاز به ویرایش کد بک‌اند است.</p>
+              <ul>
+                <li v-for="(cost, type) in wallUpgradeSettings" :key="type" v-if="cost.next" class="mb-1">
+                  <span class="capitalize">{{ type }}</span> به {{ cost.next }}: {{ cost.cost }} امتیاز (سلامت جدید: {{cost.health}})
+                </li>
+              </ul>
+              <!-- <button @click="saveWallUpgradeCosts" class="btn-primary w-full mt-3" disabled>ذخیره هزینه دیوارها (غیرفعال)</button> -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Reset Tab Content -->
+        <div v-if="gameManagementActiveTab === 'reset'">
+            <h3 class="text-xl font-semibold mb-4 text-red-500">ریست کردن اطلاعات بازی برای یک نقشه</h3>
+            <div class="bg-gray-700 p-6 rounded-lg max-w-md mx-auto">
+                <p class="text-yellow-400 text-sm mb-3">هشدار: این عمل تمام مالکیت‌های املاک، دیوارها، مهمات مستقر شده و امواج حمله مربوط به نقشه انتخاب شده را حذف و بازی را به حالت اولیه بازمی‌گرداند. این عمل غیرقابل بازگشت است.</p>
+                <label for="mapToResetSelect" class="block text-sm font-medium text-gray-300 mb-1">انتخاب نقشه برای ریست:</label>
+                <select id="mapToResetSelect" v-model="mapToReset" class="input-field w-full mb-4">
+                    <option value="">-- انتخاب نقشه --</option>
+                    <option v-for="map in gameMaps" :key="map.id" :value="map.id">{{ map.name }} (ID: {{ map.id }})</option>
+                </select>
+                <button @click="resetGameDataForMap" class="btn-danger w-full" :disabled="!mapToReset">ریست کامل اطلاعات این نقشه</button>
+            </div>
+        </div>
+
+      </section>
+      <!-- End Territory Defense Game Management Section -->
+
       </div>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>

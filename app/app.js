@@ -107,47 +107,60 @@ async function isAdminOrMentor(req, res, next) {
 app.get('/', (req, res) => res.render('auth'));
 app.use('/', require('./routes/auth'));
 
-const adminRouter = require('./routes/admin')(io);
+// --- Standard Admin Panel ---
+const adminRouter = require('./routes/admin')(io); // This likely handles /admin page and some base admin APIs
 app.use('/admin', isAdmin, adminRouter);
 
+// --- API Routes ---
+
+// Announcements
 const announcementsRouter = require('./routes/announcements')(io);
-app.use('/api/announcements', announcementsRouter);
+app.use('/api/announcements', announcementsRouter); // User access might be through this if not restricted by isUser
 app.use('/admin/api/announcements', isAdmin, announcementsRouter);
 
+// Admin Groups
 const adminGroupsRouter = require('./routes/adminGroups')(io);
 app.use('/admin/api/groups', isAdmin, adminGroupsRouter);
 
+// Training / Content
 const trainingRouter = require('./routes/training')(io);
 app.use('/api/training', isUser, trainingRouter);
 app.use('/admin/api/training', isAdmin, trainingRouter);
 
+// Shop (Admin parts)
 const adminShopRouter = require('./routes/adminShop');
 app.use('/admin/api/shop', isAdmin, adminShopRouter);
-
 const adminUniqueItemsRouter = require('./routes/adminUniqueItems');
 app.use('/admin/api/unique-items', isAdmin, adminUniqueItemsRouter);
 
+// Shop (User parts)
 const shopRouter = require('./routes/shop');
 app.use('/api/shop', isUser, shopRouter);
-
 const shopUniqueItemsRouter = require('./routes/shopUniqueItems');
 app.use('/api/shop/unique-items', isUser, shopUniqueItemsRouter);
 
+// User Groups
 const groupRoutes = require('./routes/group');
 app.use('/api/groups', isUser, groupRoutes);
 
-// --- Question Bank Routes ---
+// Question Bank
 const adminQuestionBankRouter = require('./routes/adminQuestionBank');
-// Applying isAdminOrMentor or just isAdmin for now.
-// The routes within adminQuestionBank.js might need more granular checks if mentors have limited access.
-app.use('/admin/api/question-bank', isAdmin, adminQuestionBankRouter); // Using isAdmin for now. Replace with isAdminOrMentor if mentors access this.
-
+app.use('/admin/api/question-bank', isAdmin, adminQuestionBankRouter);
 const questionBankUserRouter = require('./routes/questionBank');
 app.use('/api/question-bank', isUser, questionBankUserRouter);
-// --- End Question Bank Routes ---
 
+// --- Territory Defense Game Routes ---
+const gameUserRoutes = require('./routes/game'); // User routes for the game
+app.use('/api/game', isUser, gameUserRoutes);
+
+const adminGameManagementRoutes = require('./routes/adminGameManagement'); // Admin routes for game
+app.use('/admin/api/game', isAdmin, adminGameManagementRoutes);
+// --- End Territory Defense Game Routes ---
+
+// Dashboard
 app.use('/dashboard', isUser, require('./routes/user'));
 
+// Feature Flags
 app.get('/api/features/initial', isUser, async (req, res) => {
     try {
         const allFlags = await FeatureFlag.findAll({
@@ -260,9 +273,13 @@ async function seedFeatureFlags() {
     { name: 'menu_training', displayName: 'منوی آموزش‌ها', isEnabled: true, category: 'menu' },
     { name: 'menu_announcements', displayName: 'منوی اطلاعیه‌ها', isEnabled: true, category: 'menu' },
     { name: 'menu_radio', displayName: 'منوی رادیو', isEnabled: true, category: 'menu' },
-    { name: 'menu_question_bank', displayName: 'منوی بانک سوال', isEnabled: true, category: 'menu' }, // New Feature Flag
+    { name: 'menu_question_bank', displayName: 'منوی بانک سوال', isEnabled: true, category: 'menu' },
+    { name: 'menu_territory_defense', displayName: 'منوی دفاع از قلمرو', isEnabled: true, category: 'menu' },
+    { name: 'menu_ammunition_store', displayName: 'منوی فروشگاه مهمات', isEnabled: true, category: 'menu' },
     { name: 'action_group_leave', displayName: 'عملیات خروج از گروه', isEnabled: true, category: 'action' },
-    { name: 'action_group_delete', displayName: 'عملیات حذف گروه (توسط سرگروه)', isEnabled: true, category: 'action' }
+    { name: 'action_group_delete', displayName: 'عملیات حذف گروه (توسط سرگروه)', isEnabled: true, category: 'action' },
+    // Feature flag for admin panel section
+    { name: 'admin_game_management', displayName: 'مدیریت بازی (ادمین)', isEnabled: true, category: 'admin_section' }
   ];
 
   for (const feature of features) {
