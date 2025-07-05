@@ -1,5 +1,6 @@
 const { GameMap, Tile, AttackWave, Wall, DeployedAmmunition, Group, sequelize } = require('../models');
-const GameEngine = require('../services/GameEngine'); // To be created
+const { Op } = require('sequelize'); // Ensuring Op is imported
+const GameEngine = require('../services/GameEngine');
 
 exports.createMap = async (req, res) => {
     const { name, size } = req.body;
@@ -10,19 +11,15 @@ exports.createMap = async (req, res) => {
 
     const transaction = await sequelize.transaction();
     try {
-        // Deactivate existing active maps if any
         await GameMap.update({ isActive: false }, { where: { isActive: true }, transaction });
-
         const newMap = await GameMap.create({ name, size: mapSize, isActive: true, gameLocked: false }, { transaction });
-
         const tiles = [];
         for (let y = 0; y < mapSize; y++) {
             for (let x = 0; x < mapSize; x++) {
-                tiles.push({ x, y, MapId: newMap.id, price: 100 }); // Default price 100
+                tiles.push({ x, y, MapId: newMap.id, price: 100 });
             }
         }
         await Tile.bulkCreate(tiles, { transaction });
-
         await transaction.commit();
         req.io.emit('admin-settings-changed', { event: 'map_created', message: 'نقشه جدید ایجاد و فعال شد.', map: newMap });
         req.io.emit('map-list-updated');
@@ -48,46 +45,37 @@ exports.listMaps = async (req, res) => {
 exports.updateMap = async (req, res) => {
     const { mapId } = req.params;
     const { name, size, isActive, gameLocked } = req.body;
-
     try {
         const map = await GameMap.findByPk(mapId);
         if (!map) {
             return res.status(404).json({ message: "نقشه یافت نشد." });
         }
-
         if (size && parseInt(size) !== map.size) {
              return res.status(400).json({ message: "تغییر اندازه نقشه پس از ایجاد پشتیبانی نمی‌شود. لطفاً نقشه جدیدی ایجاد کنید." });
         }
-
         const transaction = await sequelize.transaction();
         let shouldForceReload = false;
         try {
             if (isActive === true && map.isActive === false) {
-                await GameMap.update({ isActive: false }, { where: { id: { [sequelize.Op.ne]: mapId }, isActive: true }, transaction });
-                shouldForceReload = true; // Activating a new map
+                await GameMap.update({ isActive: false }, { where: { id: { [Op.ne]: mapId }, isActive: true }, transaction });
+                shouldForceReload = true;
             } else if (isActive === false && map.isActive === true) {
-                shouldForceReload = true; // Deactivating current map
+                shouldForceReload = true;
             }
-
-
             map.name = name !== undefined ? name : map.name;
             map.isActive = isActive !== undefined ? isActive : map.isActive;
             map.gameLocked = gameLocked !== undefined ? gameLocked : map.gameLocked;
-
             await map.save({ transaction });
             await transaction.commit();
-
             req.io.emit('admin-settings-changed', { event: 'map_updated', message: `تنظیمات نقشه ${map.name} به‌روز شد.`, mapId: map.id, newSettings: map });
             if (shouldForceReload) {
                 req.io.emit('force-reload', { message: "تنظیمات نقشه فعال تغییر کرد."});
             }
             req.io.emit('map-list-updated');
-
-
             res.status(200).json({ message: "نقشه با موفقیت به‌روزرسانی شد.", map });
         } catch (innerError) {
             await transaction.rollback();
-            throw innerError; // Rethrow to be caught by outer catch
+            throw innerError;
         }
     } catch (error) {
         console.error("Error updating map:", error);
@@ -95,21 +83,16 @@ exports.updateMap = async (req, res) => {
     }
 };
 
-
 exports.createAttackWave = async (req, res) => {
-    // Destructure all expected parameters from req.body at the beginning
     const { mapId, power, durationValue, durationUnit, isPowerVisible } = req.body;
 
-    // Validate required fields using the destructured variables
     if (mapId === undefined || power === undefined || durationValue === undefined || durationUnit === undefined) {
         return res.status(400).json({ message: "شناسه نقشه، قدرت، مقدار زمان و واحد زمان برای حمله الزامی است." });
     }
-
     const numPower = parseInt(power);
     if (isNaN(numPower) || numPower <= 0) {
         return res.status(400).json({ message: "قدرت حمله باید یک عدد مثبت باشد." });
     }
-
     const numDuration = parseInt(durationValue);
     if (isNaN(numDuration) || numDuration <= 0) {
         return res.status(400).json({ message: "مقدار زمان باید یک عدد مثبت باشد." });
@@ -130,7 +113,7 @@ exports.createAttackWave = async (req, res) => {
             return res.status(400).json({ message: "واحد زمان نامعتبر است. گزینه‌های مجاز: 'minutes', 'hours', 'days'." });
     }
 
-    const finalAttackTime = new Date(Date.now() + durationInMilliseconds); // Renamed to avoid any possible scope collision
+    const finalAttackTime = new Date(Date.now() + durationInMilliseconds);
 
     try {
         const map = await GameMap.findByPk(mapId);
@@ -141,21 +124,36 @@ exports.createAttackWave = async (req, res) => {
             return res.status(400).json({ message: "تنها برای نقشه‌های فعال می‌توان موج حمله تعریف کرد." });
         }
 
-        const wave = await AttackWave.create({
+        const newWaveInstance = await AttackWave.create({
             MapId: mapId,
-            power: parseInt(power),
-            attackTime: new Date(attackTime),
+            power: numPower,
+            attackTime: finalAttackTime,
             isPowerVisible: isPowerVisible !== undefined ? (String(isPowerVisible).toLowerCase() === 'true' || String(isPowerVisible) === '1') : true,
             isExecuted: false
         });
 
-        req.io.to(`map-${mapId}`).emit('attack-imminent', { mapId, wave }); // Emit to specific map room
-        req.io.emit('admin-settings-changed', { event:'attack_wave_created', message: `موج حمله جدید برای نقشه ${map.name} تعریف شد.`, wave });
+        const waveDataForNotification = {
+            id: newWaveInstance.id,
+            mapId: newWaveInstance.MapId,
+            power: newWaveInstance.power,
+            attackTime: newWaveInstance.attackTime,
+            isPowerVisible: newWaveInstance.isPowerVisible,
+            isExecuted: newWaveInstance.isExecuted
+        };
 
-        res.status(201).json({ message: "موج حمله با موفقیت تعریف شد.", wave });
+        req.io.emit('attack-imminent', { mapId: newWaveInstance.MapId, wave: waveDataForNotification });
+
+        req.io.emit('admin-settings-changed', {
+            event: 'attack_wave_created',
+            message: `موج حمله جدید برای نقشه ${map.name} تعریف شد.`,
+            wave: waveDataForNotification
+        });
+
+        res.status(201).json({ message: "موج حمله با موفقیت تعریف شد.", wave: waveDataForNotification });
+
     } catch (error) {
-        console.error("Error creating attack wave:", error);
-        res.status(500).json({ message: "خطا در تعریف موج حمله." });
+        console.error("Error creating attack wave (full error):", error);
+        res.status(500).json({ message: "خطا در سرور هنگام تعریف موج حمله. جزئیات در لاگ سرور." });
     }
 };
 
@@ -188,10 +186,10 @@ exports.executeNextAttackWave = async (req, res) => {
         if (!map) return res.status(404).json({ message: "نقشه یافت نشد" });
         if (!map.isActive) return res.status(400).json({ message: "نقشه فعال نیست" });
 
-        const gameEngine = new GameEngine(mapId, req.io); // GameEngine needs io for emissions
+        const gameEngine = new GameEngine(mapId, req.io);
         const result = await gameEngine.executeNextAttack();
 
-        if (!result || !result.wave) { // Check if a wave was actually processed
+        if (!result || !result.wave) {
             return res.status(404).json({ message: result.message || "موج حمله بعدی برای اجرا یافت نشد یا هم اکنون قابل اجرا نیست." });
         }
 
@@ -203,18 +201,15 @@ exports.executeNextAttackWave = async (req, res) => {
     }
 };
 
-
 exports.getTilePrices = async (req, res) => {
     try {
         const { mapId } = req.query;
-        let price = 100; // Default global
+        let price = 100;
         if (mapId) {
-            const map = await GameMap.findByPk(mapId, { attributes: ['id']}); // Check if map exists
+            const map = await GameMap.findByPk(mapId, { attributes: ['id']});
             if(!map){
                 return res.status(404).json({message: "نقشه برای دریافت قیمت یافت نشد."})
             }
-            // If you add a defaultTilePrice to GameMap model, fetch it here
-            // price = map.defaultNewTilePrice || 100;
         }
         res.json({ defaultTilePrice: price });
     } catch (error) {
@@ -224,7 +219,7 @@ exports.getTilePrices = async (req, res) => {
 };
 
 exports.setTilePrices = async (req, res) => {
-    const { defaultPrice, mapId } = req.body; // mapId is optional
+    const { defaultPrice, mapId } = req.body;
     if (defaultPrice === undefined || parseInt(defaultPrice) < 0) {
         return res.status(400).json({ message: "قیمت نامعتبر است." });
     }
@@ -248,14 +243,12 @@ exports.setTilePrices = async (req, res) => {
             whereClause.MapId = mapId;
             mapToUpdateIO = mapId;
         } else {
-            // Update for all unowned tiles across ALL active maps
             const activeMaps = await GameMap.findAll({where: {isActive: true}, attributes:['id'], transaction});
             if(!activeMaps.length){
                 await transaction.rollback();
                 return res.status(400).json({message: "هیچ نقشه فعالی برای تنظیم قیمت وجود ندارد."});
             }
-            whereClause.MapId = {[sequelize.Op.in]: activeMaps.map(m => m.id)};
-            // If affecting all active maps, could emit a general map data changed event, or loop and emit for each
+            whereClause.MapId = {[Op.in]: activeMaps.map(m => m.id)};
         }
 
         const [affectedCount] = await Tile.update(
@@ -266,11 +259,11 @@ exports.setTilePrices = async (req, res) => {
         await transaction.commit();
         req.io.emit('admin-settings-changed', { event: 'tile_price_changed', message: 'قیمت املاک به‌روز شد.', newPrice, mapIdTargeted: mapId });
 
-        if (mapToUpdateIO) { // If a specific map was targeted
-             const mapData = await require('./GameController').getFullMapState(mapToUpdateIO); // Assuming GameController is correctly structured
+        if (mapToUpdateIO) {
+             const mapData = await require('./GameController').getFullMapState(mapToUpdateIO);
              if(mapData) req.io.emit('map-updated', { map: mapData });
-        } else { // Prices changed globally for active maps, might need a broader update or individual updates
-            req.io.emit('force-reload', {message: "قیمت برخی املاک تغییر کرده است."}); // Simpler to force reload if global
+        } else {
+            req.io.emit('force-reload', {message: "قیمت برخی املاک تغییر کرده است."});
         }
 
         res.status(200).json({ message: `قیمت ${affectedCount} ملک خالی به‌روزرسانی شد.` });
@@ -281,14 +274,12 @@ exports.setTilePrices = async (req, res) => {
     }
 };
 
-
 exports.getWallUpgradeCosts = async (req, res) => {
     try {
-        // These are currently hardcoded in GameController, but could be made dynamic via admin
         const upgradeMatrix = {
-            wood: { next: 'stone', cost: 150, health: 250, currentHealth: 100 }, // Added currentHealth for reference
+            wood: { next: 'stone', cost: 150, health: 250, currentHealth: 100 },
             stone: { next: 'metal', cost: 300, health: 500, currentHealth: 250 },
-            metal: { next: null, cost: 0, health: 500, currentHealth: 500 } // Max level
+            metal: { next: null, cost: 0, health: 500, currentHealth: 500 }
         };
         res.status(200).json(upgradeMatrix);
     } catch (error) {
@@ -298,12 +289,7 @@ exports.getWallUpgradeCosts = async (req, res) => {
 };
 
 exports.setWallUpgradeCosts = async (req, res) => {
-    // This would require changing the hardcoded values or storing them in a config/DB
-    // For now, this is a placeholder.
-    // const { costs } = req.body; // Expecting an object like the upgradeMatrix
     console.warn("setWallUpgradeCosts is not fully implemented to change dynamic costs yet. Costs are currently hardcoded in GameController.");
-    // If costs were dynamic and updated:
-    // req.io.emit('admin-settings-changed', { event: 'wall_costs_changed', message: 'تنظیمات هزینه ارتقا دیوار به‌روز شد.' });
     res.status(501).json({ message: "قابلیت تنظیم هزینه ارتقا دیوار هنوز پیاده‌سازی نشده است. (مقادیر فعلی در کد ثابت هستند)" });
 };
 
@@ -312,7 +298,6 @@ exports.resetGameData = async (req, res) => {
     if (!mapId) {
         return res.status(400).json({ message: "شناسه نقشه برای ریست الزامی است." });
     }
-
     const transaction = await sequelize.transaction();
     try {
         const map = await GameMap.findByPk(mapId, { transaction });
@@ -320,22 +305,19 @@ exports.resetGameData = async (req, res) => {
             await transaction.rollback();
             return res.status(404).json({ message: "نقشه یافت نشد." });
         }
-
         const wallsOfMap = await Wall.findAll({
             include: [{ model: Tile, as: 'tile', where: { MapId: mapId }, attributes: [] }],
             attributes: ['id'],
             transaction
         });
         const wallIds = wallsOfMap.map(w => w.id);
-
         if (wallIds.length > 0) {
-            await DeployedAmmunition.destroy({ where: { WallId: { [sequelize.Op.in]: wallIds } }, transaction });
-            await Wall.destroy({ where: { id: { [sequelize.Op.in]: wallIds } }, transaction }); // Destroy walls to recreate them clean later
+            await DeployedAmmunition.destroy({ where: { WallId: { [Op.in]: wallIds } }, transaction });
+            await Wall.destroy({ where: { id: { [Op.in]: wallIds } }, transaction });
         }
 
         await Tile.update({ OwnerGroupId: null, price: 100 }, { where: { MapId: mapId }, transaction });
 
-        // Re-create initial walls for all tiles of this map as they are now unowned
         const tilesOfMap = await Tile.findAll({where: {MapId: mapId}, attributes: ['id'], transaction});
         for(const tile of tilesOfMap){
             const wallData = [
@@ -347,37 +329,25 @@ exports.resetGameData = async (req, res) => {
             await Wall.bulkCreate(wallData, { transaction });
         }
 
-
-        // Reset Group Colors for groups that had an owner on this map.
-        // More targeted than resetting all group colors.
         const groupsOnMap = await Tile.findAll({
             attributes: [[sequelize.fn('DISTINCT', sequelize.col('OwnerGroupId')), 'OwnerGroupId']],
-            where: { MapId: mapId, OwnerGroupId: {[sequelize.Op.ne]: null} },
+            where: { MapId: mapId, OwnerGroupId: {[Op.ne]: null} },
             transaction,
             raw: true
         });
         const groupIdsOnMap = groupsOnMap.map(g => g.OwnerGroupId).filter(id => id != null);
         if(groupIdsOnMap.length > 0){
-            await Group.update({ color: null }, { where: { id: {[sequelize.Op.in]: groupIdsOnMap} }, transaction });
+            await Group.update({ color: null }, { where: { id: {[Op.in]: groupIdsOnMap} }, transaction });
         }
-        // Score reset is a big decision, usually not part of a simple map reset unless intended.
-        // await Group.update({ score: 250 }, { where: { id: {[sequelize.Op.in]: groupIdsOnMap} }, transaction });
-
-
         await AttackWave.destroy({ where: { MapId: mapId }, transaction });
-
         map.gameLocked = false;
         await map.save({ transaction });
-
         await transaction.commit();
-
         req.io.emit('admin-settings-changed', { event: 'game_reset', message: `اطلاعات بازی برای نقشه ${map.name} ریست شد.`, mapId });
         const mapData = await require('./GameController').getFullMapState(mapId);
         if(mapData) req.io.emit('map-updated', { map: mapData });
         req.io.emit('force-reload', { message: `بازی برای نقشه ${map.name} توسط ادمین ریست شد.`})
-
         res.status(200).json({ message: `اطلاعات بازی برای نقشه '${map.name}' با موفقیت ریست شد.` });
-
     } catch (error) {
         await transaction.rollback();
         console.error("Error resetting game data for map:", error);
