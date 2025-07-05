@@ -5,9 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let userScore = 0;
     let userInventory = [];
     let storeItems = [];
-    let gameIsLocked = false; // Keep track of game lock status
+    let gameIsLocked = false;
 
-    // Helper to show loading spinner (global one)
     const showGlobalLoading = (show) => {
         const spinner = document.getElementById('loading-spinner');
         if (spinner) spinner.style.display = show ? 'flex' : 'none';
@@ -16,15 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
     async function fetchInitialData() {
         showGlobalLoading(true);
         try {
-            // Fetch game lock status first
             const mapResponse = await axios.get('/api/game/map/active');
             if (mapResponse.data && mapResponse.data.id) {
                 gameIsLocked = mapResponse.data.gameLocked;
             } else {
-                // No active map, assume game functionality might be limited or store still works
-                console.warn("No active map found, but proceeding to load ammunition store.");
+                console.warn("No active map found for ammunition store context.");
             }
-
 
             const [storeRes, inventoryRes] = await Promise.all([
                 axios.get('/api/game/ammunition/store'),
@@ -37,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error("Error fetching ammunition data:", error);
             let errorMsg = "خطا در بارگذاری فروشگاه مهمات.";
-            if (error.response && error.response.status === 403 && error.response.data.message.includes("عضو هیچ گروهی نیستید")) {
+            if (error.response && error.response.status === 403 && error.response.data.message && error.response.data.message.includes("عضو هیچ گروهی نیستید")) {
                 errorMsg = "برای دسترسی به فروشگاه مهمات، ابتدا باید عضو یک گروه شوید یا یک گروه ایجاد کنید.";
             } else if (error.response && error.response.data && error.response.data.message) {
                 errorMsg = error.response.data.message;
@@ -51,7 +47,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderAmmunitionStore() {
         let html = `<div class="container mx-auto p-4">`;
 
-        // User Inventory and Score Display
         html += `<div class="mb-8 p-4 bg-gray-800 rounded-lg shadow">
                     <h2 class="text-xl font-bold text-white mb-3">انبار مهمات شما</h2>
                     <p class="text-lg text-yellow-400 mb-3">امتیاز گروه شما: <span id="user-score">${userScore}</span></p>`;
@@ -77,7 +72,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         html += `</div>`;
 
-        // Ammunition Store Items
         html += `<div class="mb-8">
                     <h2 class="text-xl font-bold text-white mb-4">مهمات قابل خرید</h2>`;
         if (storeItems.length > 0) {
@@ -102,20 +96,22 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             html += `<p class="text-gray-400">در حال حاضر هیچ مهماتی برای فروش موجود نیست.</p>`;
         }
-        html += `</div></div>`; // Close container
+        html += `</div></div>`;
 
         contentDiv.innerHTML = html;
         attachEventListeners();
     }
 
     function attachEventListeners() {
-        if (gameIsLocked) return; // Don't attach buy listeners if game is locked
+        if (gameIsLocked) return;
 
         document.querySelectorAll('.buy-ammo-btn').forEach(button => {
-            button.addEventListener('click', async (e) => {
+            button.addEventListener('click', (e) => {
                 const ammunitionId = e.target.dataset.ammoId;
                 const price = parseInt(e.target.dataset.price);
                 const itemCard = e.target.closest('.store-item');
+                const itemNameElement = itemCard.querySelector('h3');
+                const itemName = itemNameElement ? itemNameElement.textContent.trim() : 'مهمات انتخاب شده';
                 const quantityInput = itemCard.querySelector('.buy-ammo-quantity');
                 const quantity = parseInt(quantityInput.value);
 
@@ -124,45 +120,43 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                if (!confirm(`آیا از خرید ${quantity} عدد ${itemCard.querySelector('h3').textContent.trim()} به قیمت کل ${price * quantity} امتیاز مطمئن هستید؟`)) return;
-
-                showGlobalLoading(true);
-                try {
-                    const response = await axios.post('/api/game/ammunition/buy', { ammunitionId, quantity });
-                    sendNotification('success', 'مهمات با موفقیت خریداری شد!');
-                    // Update inventory and score from response or via socket
-                    if (response.data.inventory && response.data.newScore !== undefined) {
-                        userInventory = response.data.inventory;
-                        userScore = response.data.newScore;
-                        renderAmmunitionStore(); // Re-render to show updated inventory and score
+                sendConfirmationNotification('confirm', `آیا از خرید ${quantity} عدد ${itemName} به قیمت کل ${price * quantity} امتیاز مطمئن هستید؟`, async (confirmed) => {
+                    if (!confirmed) return;
+                    showGlobalLoading(true);
+                    try {
+                        const response = await axios.post('/api/game/ammunition/buy', { ammunitionId, quantity });
+                        sendNotification('success', 'مهمات با موفقیت خریداری شد!');
+                        if (response.data.inventory && response.data.newScore !== undefined) {
+                            userInventory = response.data.inventory;
+                            userScore = response.data.newScore;
+                            renderAmmunitionStore();
+                        }
+                    } catch (error) {
+                        console.error("Error buying ammunition:", error);
+                        sendNotification('error', error.response?.data?.message || 'خطا در خرید مهمات.');
+                    } finally {
+                        showGlobalLoading(false);
                     }
-                } catch (error) {
-                    console.error("Error buying ammunition:", error);
-                    showAlert(error.response?.data?.message || 'خطا در خرید مهمات.', 'error');
-                } finally {
-                    showGlobalLoading(false);
-                }
+                });
             });
         });
     }
 
-    // Socket event listeners
     if (window.socket) {
         window.socket.on('inventory-updated', (data) => {
             console.log('Socket event: inventory-updated', data);
             if (data.inventory && data.score !== undefined) {
                 userInventory = data.inventory;
                 userScore = data.score;
-                 if (ammunitionSection.classList.contains('active')) {
+                 if (ammunitionSection && ammunitionSection.classList.contains('active')) {
                     renderAmmunitionStore();
-                    sendNotification('info', 'انبار و امتیاز شما به‌روز شد.'); // Corrected showAlert to sendNotification
+                    sendNotification('info', 'انبار و امتیاز شما به‌روز شد.');
                 }
             }
         });
         window.socket.on('admin-settings-changed', (data) => {
-            // If admin changes ammo prices or visibility, good to refresh store
             if (data.event === 'ammo_created' || data.event === 'ammo_updated' || data.event === 'ammo_deleted'){
-                 if (ammunitionSection.classList.contains('active')) {
+                 if (ammunitionSection && ammunitionSection.classList.contains('active')) {
                     console.log("Admin settings for ammo changed, re-fetching store data.");
                     fetchInitialData();
                 }
@@ -170,22 +164,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
          window.socket.on('game-locked', (data) => {
             gameIsLocked = data.gameLocked;
-            if (ammunitionSection.classList.contains('active')) {
-                showAlert(`وضعیت قفل بازی تغییر کرد. ${data.gameLocked ? 'خرید مهمات غیرفعال شد.' : 'خرید مهمات فعال شد.'}`, 'info');
-                renderAmmunitionStore(); // Re-render to show/hide buy buttons
+            if (ammunitionSection && ammunitionSection.classList.contains('active')) {
+                sendNotification('info', `وضعیت قفل بازی تغییر کرد. ${data.gameLocked ? 'خرید مهمات غیرفعال شد.' : 'خرید مهمات فعال شد.'}`);
+                renderAmmunitionStore();
             }
         });
     }
 
-
-    // Initialize when the tab becomes active
     const observer = new MutationObserver((mutationsList, observer) => {
         for(const mutation of mutationsList) {
             if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-                if (ammunitionSection.classList.contains('active')) {
+                if (ammunitionSection && ammunitionSection.classList.contains('active')) {
                     fetchInitialData();
                 } else {
-                     contentDiv.innerHTML = ''; // Clear content when tab is not active
+                     contentDiv.innerHTML = '';
                 }
             }
         }
@@ -193,21 +185,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (ammunitionSection) {
         observer.observe(ammunitionSection, { attributes: true });
-        // Initial load if the tab is already active
         if (ammunitionSection.classList.contains('active')) {
             fetchInitialData();
         }
     }
 
-    // Handle refresh button
     const refreshButton = document.getElementById('btn-refresh');
     if (refreshButton) {
         refreshButton.addEventListener('click', () => {
-            if (ammunitionSection.classList.contains('active')) {
-                 showAlert('در حال به‌روزرسانی اطلاعات فروشگاه مهمات...', 'info', 2000);
+            if (ammunitionSection && ammunitionSection.classList.contains('active')) {
+                 sendNotification('info', 'در حال به‌روزرسانی اطلاعات فروشگاه مهمات...');
                 fetchInitialData();
             }
         });
     }
-
 });
+```
+
+با این بازنویسی‌ها، اطمینان حاصل می‌شود که آخرین نسخه اصلاح شده از کدها در فایل‌ها قرار می‌گیرد و مشکلات مربوط به `confirm` و `showAlert` برطرف می‌شوند.
+
+اکنون کد برای ارسال با این اصلاحات آماده است.
